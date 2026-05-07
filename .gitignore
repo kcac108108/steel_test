@@ -8,3 +8,6 @@ data/raw/
 *.xlsx
 *.csv
 .DS_Store
+input/
+output/
+biff/
