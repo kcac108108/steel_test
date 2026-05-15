@@ -165,6 +165,8 @@ def _normalize(s: str) -> str:
     # 예: 1.219MM → 1219MM, 2.438MM → 2438MM (단, 8.800MM 등 trailing 0은 소수점으로 유지)
     if re.search(r'\bSHEET\b', s, re.IGNORECASE):
         s = re.sub(r'\b([1-9])\.(\d{2}[1-9])\s*(MM)\b', r'\1\2\3', s, flags=re.IGNORECASE)
+    # X NNNN(CUT) 절단 길이 제거: X 2950(CUT) → ' ' (파이프 절단 길이는 치수 아님, 공백으로 분리)
+    s = re.sub(r'\s*[Xx]\s*\d+\s*\(CUT\)\b', ' ', s, flags=re.IGNORECASE)
     return re.sub(r'\s+', ' ', s)
 
 
@@ -292,6 +294,8 @@ def _strip_grade_codes(text: str) -> str:
     text = re.sub(r'\b\d{2}B\d{2}\b', '', text, flags=re.IGNORECASE)
     # SAE 52100 베어링강 강종코드 제거 (5자리 숫자로 치수로 오인됨)
     text = re.sub(r'\b521\d{2}\b', '', text, flags=re.IGNORECASE)
+    # SAE 탄소강 강종코드 괄호 제거: (1006), (1008), (1018), (1020), (1045) 등
+    text = re.sub(r'\(\s*10[0-9][0-9]\s*\)', '', text, flags=re.IGNORECASE)
     # NILO 니켈합금 강종코드 제거: NILO 42, NILO 36 등
     text = re.sub(r'\bNILO\s+\d+\b', '', text, flags=re.IGNORECASE)
     # ASTM F{2자리}-{2자리} 규격 코드 제거: F30-96, F15-12 등 (ASTM 맥락)
@@ -320,6 +324,8 @@ def _strip_grade_codes(text: str) -> str:
     text = re.sub(r'\b5L(?:GR-[A-Z])?\b', '', text, flags=re.IGNORECASE)
     # 합금 비율 코드: NIAL95/5, CU70/30 등 (알파+숫자+/+숫자)
     text = re.sub(r'\b[A-Z]{2,5}\d{1,3}/\d+\b', '', text, flags=re.IGNORECASE)
+    # 아연도금 코팅 등급 코드 제거: HIZN-N3, HIZN-N8 등 (HOT DIP GALVANIZING 등급)
+    text = re.sub(r'\bHIZN-N\d+\b', '', text, flags=re.IGNORECASE)
     # 용접봉/와이어 모델 코드: ERNI-1, ER70S-6, AK-10 등 (알파+하이픈+숫자)
     text = re.sub(r'\b[A-Z]{2,5}-\d+\b', '', text, flags=re.IGNORECASE)
     # OCR 합금 와이어 강종코드: OCR25AL50, OCR21AL8NB, OCR27AL7MO2 등
@@ -400,7 +406,10 @@ def _parse_tokens(text: str, preserve_order: bool = False) -> Optional[str]:
 
     if has_c:
         non_c.append('C')
-    return 'X'.join(non_c)
+    result = 'X'.join(non_c)
+    # NPS 토큰과 XXS 사이의 여분 X 제거: NPS3XXXS → NPS3XXS (X separator가 XXS와 겹치는 경우)
+    result = re.sub(r'\b(NPS\d+)X(XXS)(?=X|\s|$)', r'\1\2', result, flags=re.IGNORECASE)
+    return result
 
 
 def _extract_twl(text: str) -> Optional[str]:
@@ -467,6 +476,8 @@ def _clean_size_block(block: str) -> str:
     block = re.sub(r'\bOD\s*\(\s*INCH\s*\)\s*[\d.]+\s*["\'"]?\s*[Xx]?\s*', '', block, flags=re.IGNORECASE)
     # NPS 명목 파이프 크기 제거: 4IN, 114.3X6.02 → 114.3X6.02
     block = re.sub(r'^\d{1,2}IN\s*,\s*(?=\d)', '', block, flags=re.IGNORECASE)
+    # *N,TS: 패턴 제거: *27,TS:1400MPA → '' (TS 앞 1-2자리 여분 값은 수량/참조, 4자리 이상은 치수)
+    block = re.sub(r'[*Xx]\s*\d{1,2}\b(?=\s*,\s*TS\s*:)', '', block, flags=re.IGNORECASE)
     # TS 인장강도 이후 제거: X C TS:359-477MPA → X C
     block = re.sub(r'\s*\bTS\s*:.*$', '', block, flags=re.IGNORECASE)
     # USE: 이후 제거
@@ -589,6 +600,8 @@ def _clean_size_block(block: str) -> str:
     block = re.sub(r'\s*\bDRUM\b.*$', '', block, flags=re.IGNORECASE)
     # AS DRAWING 이후 제거: 1-1/4" AS DRAWING → 1-1/4"
     block = re.sub(r'\s*\bAS\s+DRAWING\b.*$', '', block, flags=re.IGNORECASE)
+    # X N(CUT) 절단 길이 제거: X 2950(CUT) → '' (파이프 절단 길이는 치수 아님)
+    block = re.sub(r'\s*[Xx]\s*\d+\s*\(CUT\)\b.*$', '', block, flags=re.IGNORECASE)
     # (CUT) 표기 이후 제거: 2950(CUT) → 2950
     block = re.sub(r'\s*\(CUT\)\b.*$', '', block, flags=re.IGNORECASE)
     # 괄호 내 알파+점 코드 제거: (N.C.V), (H.R.) 등 약어 코드
@@ -723,13 +736,15 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
                 return f'{h}X{b}X{t}'
 
     # MAEU 해운 화물 직사각/정사각 파이프: THK N MM;H N MM;W N MM 패턴
+    # THK1 2.5 MM 처럼 공백으로 분리된 숫자도 허용 (예: THK12.5 → THK1 2.5)
     if re.search(r'\bMAEU\d{6,}\b', text, re.IGNORECASE):
         thk_hw_m = re.search(
-            r'\bTHK\s*([\d.]+)\s*MM\s*;H\s*([\d.]+)\s*MM\s*;W\s*([\d.]+)\s*MM\b',
+            r'\bTHK\s*([\d]+\s*[\d.]*)\s*MM\s*;H\s*([\d.]+)\s*MM\s*;W\s*([\d.]+)\s*MM\b',
             text, re.IGNORECASE
         )
         if thk_hw_m:
-            return f'{thk_hw_m.group(1)}X{thk_hw_m.group(2)}X{thk_hw_m.group(3)}'
+            thk = thk_hw_m.group(1).replace(' ', '')
+            return f'{thk}X{thk_hw_m.group(2)}X{thk_hw_m.group(3)}'
 
     # PFC 채널형강: PFC{H}X{B}X{t} + LENGTH: NM → HxBxtxL_mm
     # \b 대신 음수 전방탐색: 3.1PFC100X50X10 에서 1P 사이에 word boundary 없음
@@ -752,6 +767,39 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
         t_max = t_range_wl_m.group(2)  # 최대값
         w, l = t_range_wl_m.group(3), t_range_wl_m.group(4)
         return f'{t_max}INX{w}INX{l}IN'
+
+    # SEAMLESS STEEL TUBES: 도면번호(/) 이후 실치수 추출
+    # 예: ...PLAIN ENDS/13138-M0001-01 193.7 X 24.0 X 6150 → 193.7X24.0X6150
+    if re.search(r'SEAMLESS\s+STEEL\s+TUBES?\b', text, re.IGNORECASE):
+        tube_dim_m = re.search(
+            r'/[\w-]+\s+([\d.]+)\s*[Xx]\s*([\d.]+)\s*[Xx]\s*(\d{3,6})(?!\d)',
+            text, re.IGNORECASE
+        )
+        if tube_dim_m:
+            d, t, l = tube_dim_m.group(1), tube_dim_m.group(2), tube_dim_m.group(3)
+            return f'{d}X{t}X{l}'
+
+    # NANO RIBBON: (N-NUM) UM 두께 마이크로미터 변환 → mm (소수 2자리)
+    # 예: NANO RIBBON 49.5MM (16-18UM) → 0.02X49.5
+    nano_m = re.search(
+        r'NANO\s+RIBBON\b.*?([\d.]+)\s*MM\s*\(\s*[\d.]+\s*[-~]\s*([\d.]+)\s*UM\s*\)',
+        text, re.IGNORECASE
+    )
+    if nano_m:
+        width_f = float(nano_m.group(1))
+        width = f'{width_f:g}'  # trailing zero 제거: 10.0 → '10'
+        um_max = float(nano_m.group(2))
+        thickness = f'{um_max / 1000:.2f}'  # μm → mm, 소수 2자리
+        return f'{thickness}X{width}'
+
+    # CLEAN SIZE N → 바 직경 추출: 102559 BAR/718 ... CLEAN SIZE 0.5100
+    clean_size_m = re.search(r'\bCLEAN\s+SIZE\s+([\d.]+)\b', text, re.IGNORECASE)
+    if clean_size_m:
+        val = clean_size_m.group(1)
+        try:
+            return f'{float(val):g}'
+        except ValueError:
+            return val
 
     # {val}MM ABOUT → 선두 단독 치수 (BOBBIN/COIL 제품): trailing zero 제거
     bobbin_m = re.match(r'^([\d.]+)\s*MM\s+ABOUT\b', text, re.IGNORECASE)
