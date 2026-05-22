@@ -156,6 +156,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'(MM|IN|FT|CM)([A-Z]{2,5}\d{3,})', r'\1 \2', s, flags=re.IGNORECASE)
     # 단위 직후 ABOUT 분리: 2.30MMABOUT → 2.30MM ABOUT
     s = re.sub(r'(MM|IN|FT|CM)(ABOUT)\b', r'\1 \2', s, flags=re.IGNORECASE)
+    # 파이프 공칭인치+스케줄: 6"*SCH40, 6" *STD, 12"*SCH20 → 6IN *SCH40 (SCH/STD/XS 앞의 " 보존)
+    s = re.sub(r'(\d+(?:\.\d+)?)\s*"\s*(?=\*?\s*(?:SCH|STD|XS|XXS))', r'\1IN ', s, flags=re.IGNORECASE)
     # 구조재 폭 표기: BOOM 133"*4.5 형태에서 " 뒤에 * 가 오면 치수 구분자 → IN 변환 안함
     s = re.sub(r'(\d+)"\s*(?=\*)', r'\1 ', s)
     # PIPE 맥락 두께+길이 연결 표기: 12.76000 → 12.7 6000 (소수 1자리 + 4자리 길이)
@@ -956,6 +958,19 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
         w_val = _fmt_int_if_whole(coil_twx0_m.group(2))
         return f'{t_val}X{w_val}XC'
 
+    # ALLOY STRIP COIL 인치 패턴: {t}"X{w}"XCOIL → {t}INX{w}INXC
+    # 정수 두께→3dp 유지 (38.00000→38.000), 소수→:g (9.85000→9.85, 0.003→0.003)
+    # 첫 숫자: 정수부 최대 4자리 (부품번호 N06000010 오인식 방지)
+    inch_coil_m = re.search(
+        r'(?<!\d)(\d{1,4}(?:\.\d+)?)\s*"\s*[Xx]\s*([\d.]+)\s*"\s*[Xx]?\s*COIL',
+        text, re.IGNORECASE
+    )
+    if inch_coil_m:
+        def _fmt_ic(s):
+            g = f'{float(s):g}'
+            return g if '.' in g else f'{float(s):.3f}'
+        return f'{_fmt_ic(inch_coil_m.group(1))}INX{_fmt_ic(inch_coil_m.group(2))}INXC'
+
     # {code} Plate N x N x Nmm 형식 (유럽식 구매주문서): 1R0053322 Plate 3 x 1500 x3000mm → 3X1500X3000
     plate_xyz_m = re.search(
         r'\bPlate\s+([\d,]+(?:\.[\d]+)?)\s*[xX]\s*([\d,]+)\s*[xX]\s*([\d,]+)\s*mm\b',
@@ -1524,9 +1539,14 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
             except ValueError:
                 return val
 
-    # SCH 파이프 패턴: {dia}" {S/SCH}{n}S? [WLD/SMLS] PIPE {len}MM
+    # OD {n}" S{n}MM 패턴 (SCH 표기에 MM 붙은 경우): OD 14" S40MM → 14INXSCH40
+    od_sch_mm_m = re.search(r'\bOD\s*([\d.]+)\s*"\s*S(\d{2,3})MM\b', text, re.IGNORECASE)
+    if od_sch_mm_m:
+        return f'{od_sch_mm_m.group(1)}INXSCH{od_sch_mm_m.group(2)}'
+
+    # SCH 파이프 패턴: {dia}"/{dia}*/{dia}IN {S/SCH}{n}S? [WLD/SMLS] PIPE {len}MM
     sch_pipe_m = re.search(
-        r'([\d]+(?:-\d+/\d+)?|\d+/\d+|[\d.]+)\s*(?:"|IN(?!CH))\s*(?:X\s*)?'
+        r'([\d]+(?:-\d+/\d+)?|\d+/\d+|[\d.]+)\s*(?:IN|"|\*)\s*(?:X\s*)?'
         r'(?:SCH|S)(\d+)S?\b\s+(?:(?:WLD|SMLS|SEAMLESS|WELDED)\s+)?PIPE\s+'
         r'([\d.]+)\s*MM\b',
         text, re.IGNORECASE
@@ -1582,8 +1602,9 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
             return val
 
     # WIRE DIA {num}MM → 단선 직경 (SWRCH 등 와이어 규격) — 숫자 직후 WIRE도 허용
+    # DIA\.? : DIA.2MM 형태에서 점을 소비해 .2→2 오인식 방지
     wire_dia_m = re.search(
-        r'(?<![A-Z])WIRE\s+DIA\s*([\d.]+)\s*(MM|CM|(?<!\w)M(?!\w)|IN(?:CH)?|FT|")?',
+        r'(?<![A-Z])WIRE\s+DIA\.?\s*([\d.]+)\s*(MM|CM|(?<!\w)M(?!\w)|IN(?:CH)?|FT|")?',
         text, re.IGNORECASE
     )
     if wire_dia_m:
@@ -1726,6 +1747,12 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
         except ValueError:
             l_s = l
         return f'{dia}INXSCH{sch}X{l_s}FT'
+
+    # ROUND BAR 분수 인치: 3-1/2" ROUND BAR → 3-1/2IN (소수 변환 없이 표기 유지)
+    if re.search(r'\bROUND\s+BAR\b', text, re.IGNORECASE):
+        rb_frac_m = re.search(r'\b(\d+-\d+/\d+)\s*"', text, re.IGNORECASE)
+        if rb_frac_m:
+            return f'{rb_frac_m.group(1)}IN'
 
     # 복합 분수 인치 전처리: 1-1/2" → 1.5IN (SIZE 블록 처리 전에 적용)
     text = re.sub(
@@ -2154,6 +2181,21 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
         length = dia_rb_m.group(2).replace(',', '')
         return f'{dia_rb_m.group(1)}X{length}'
 
+    # 1-pre-4a. {N} FEET LENGTH 패턴: 2 FEET LENGTH → 2FT
+    feet_len_m = re.search(r'\b(\d+(?:\.\d+)?)\s*FEET?\s+(?:IN\s+)?LENGTH\b', text, re.IGNORECASE)
+    if feet_len_m:
+        return f'{feet_len_m.group(1)}FT'
+
+    # 1-pre-4b. MODEL NO:,강종,NMM 패턴: MODEL NO.SBI15, S55C, 4030MM → 4030
+    model_grade_dim_m = re.search(r'\bMODEL\b[^,]*,\s*\w+,\s*(\d{3,6})\s*MM\b', text, re.IGNORECASE)
+    if model_grade_dim_m:
+        return model_grade_dim_m.group(1)
+
+    # 1-pre-4c. <NMM 최대폭 표기: FLAT ROLLED <600MM WIDE → 600
+    lt_mm_m = re.search(r'<\s*(\d+(?:\.\d+)?)\s*MM\b', text, re.IGNORECASE)
+    if lt_mm_m:
+        return lt_mm_m.group(1)
+
     # 1. SIZE: 키워드 블록
     result = _extract_size_block(text)
     if result:
@@ -2200,6 +2242,12 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
                 and re.search(r'SHAPE\s*:\s*\w*\s*(?:PIPE|TUBE)', text, re.IGNORECASE)
                 and not re.search(r'SHAPE\s*:\s*(?:IN\s+)?COIL\b', text, re.IGNORECASE)):
             result = result[:-2]
+        # 단일 숫자 결과: trailing zero 제거 (0.50→0.5)
+        if re.match(r'^[\d.]+(?:IN|FT)?$', result) and '.' in result:
+            try:
+                result = f'{float(result):g}'
+            except ValueError:
+                pass
         return _append_coil_if_shape(result, text) or result
 
     # 2-0a. SA179/SA334 형식: OD{n}MM X WT{m}MM[...] X{l}MM (열교환기관 OD/WT/Length)
@@ -2421,6 +2469,14 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
         # ROUND BAR 공차 분수 제거: 13X4030X1/2 → 13X4030 (SUS630 H900 등)
         if re.search(r'SHAPE\s*:\s*ROUND\s*BAR', text, re.IGNORECASE):
             result = re.sub(r'X\d+/\d+$', '', result)
+        # COIL 컨텍스트 trailing zero 제거: 0.200X40XC → 0.2X40XC (COIL/PIPE 혼합 제외)
+        if (re.search(r'\bCOIL\b', text, re.IGNORECASE)
+                and not re.search(r'\b(?:PIPE|TUBE)\b', text, re.IGNORECASE)):
+            parts = result.split('X')
+            result = 'X'.join(
+                f'{float(p):g}' if re.match(r'^[\d.]+$', p) else p
+                for p in parts
+            )
         return _append_coil_if_shape(result, text) or result
     # 단일 치수: clean 텍스트가 거의 치수 정보만 남은 경우 반환
     if result and re.match(r'^[\d.]+(?:IN|FT)?$', result):

@@ -3,7 +3,7 @@
 
 사용법:
   python scripts/classify.py --input 전일자.xlsx --output 결과.xlsx
-  python scripts/classify.py --input 전일자.xlsx  # 결과는 자동으로 output/ 저장
+  python scripts/classify.py --input 전일자.xlsx  1# 결과는 자동으로 output/ 저장
 
 입력 엑셀 컬럼:
   - 번호, 수입신고번호, 거래품명, 규격, 규격번호, 강종, 사이즈
