@@ -306,6 +306,12 @@ def _normalize(s: str) -> str:
     # 화학 조성 퍼센트 표기 제거: 1NI, 2CR, 0.5V 등 (합금 성분비, 치수 아님)
     # (?<![/]) lookbehind: 1/2MO 같은 분수 뒤 성분기호는 보호 (1/2MO → 1/ 잔류 방지)
     s = re.sub(r'(?<![/])\b\d+(?:\.\d+)?(?:NI|MO|CR|MN|CU|AL|CO)\b', '', s, flags=re.IGNORECASE)
+    # KNCLSS 칼라 코드 치수 변환: KNCLSS8-30-35 → 8MM X 30MM (bore×OD, \b 없음: COLLARSKNCLSS 대응)
+    s = re.sub(
+        r'KNCLSS(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)-\d+(?:\.\d+)?\b',
+        lambda m: f'{m.group(1)}MM X {m.group(2)}MM',
+        s, flags=re.IGNORECASE
+    )
     # 칼라/링 모델 코드 치수 변환: AMSC10-14-30 → 14X30, NCLM20-35-50 → 35X50
     # (전체 코드는 삭제하되 뒤 두 숫자를 치수로 변환, NCLM/NCLB/AMSC 계열)
     s = re.sub(
@@ -357,6 +363,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\bS\d{3}[A-Z]\d?[A-Z]?\b', '', s, flags=re.IGNORECASE)
     # (nEA), (nPCS) 수량 괄호 제거: (2EA), (3PCS) → '' (치수 아님)
     s = re.sub(r'\(\s*\d+\s*(?:EA|PCS?|NOS?)\s*\)', '', s, flags=re.IGNORECASE)
+    # AWT/AVGWT {m}-{l}L 벽두께-길이 형식 변환: AWT 101.6-5700L → WT 101.6 X 5700 (범위로 오인식 방지)
+    s = re.sub(r'\b(?:AVG|A)?WT\s+([\d.]+)\s*-\s*([\d.]+)L\b', r'WT \1 X \2', s, flags=re.IGNORECASE)
     # SIZE:{n}(A|KG) 단위중량 표기 제거: SIZE:37ALENGTH → SIZE:LENGTH (단위중량은 치수 아님)
     s = re.sub(r'(?<=SIZE:)\d+(?:A|KG)(?=[A-Z])', '', s, flags=re.IGNORECASE)
     # BATCH NO: 로트번호 제거: BATCH NO:M1SW231037 → ''
@@ -1070,6 +1078,17 @@ def _strip_trailing_zeros(size: str) -> str:
 def extract_size_regex(spec_text: str) -> Optional[str]:
     """정규식 기반 사이즈 추출"""
     text = _normalize(spec_text)
+
+    # WAVEGUIDE 길이 추출: GLG-100/P51MJ3WAVEGUIDE ... L= 4200MM → 4200
+    if re.search(r'WAVEGUIDE', text, re.IGNORECASE):
+        wg_m = re.search(r'\bL\s*=\s*([\d.]+)\s*MM\b', text, re.IGNORECASE)
+        if wg_m:
+            v = wg_m.group(1)
+            try:
+                fv = float(v)
+                return str(int(fv)) if fv == int(fv) else v
+            except ValueError:
+                return v
 
     # T-star 형식 전용 핸들러: {T}T-{W}*{H}[*{L}] — 색상코드/수량/접미사 이후 무시
     # 예: 14T-22*29/241-6(6) → 14X22X29, 19T-32*31*31(4) → 19X32X31X31
