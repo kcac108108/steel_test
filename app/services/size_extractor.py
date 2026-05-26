@@ -119,6 +119,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'MML\b', 'MM', s, flags=re.IGNORECASE)
     # MMM 이상 중복 M → MM 통일: 3.15MMM → 3.15MM
     s = re.sub(r'M{3,}', 'MM', s, flags=re.IGNORECASE)
+    # 소수점 주변 공백 제거: 19. 0MM → 19.0MM (스캔/OCR 오류 교정)
+    s = re.sub(r'(\d)\. (\d)', r'\1.\2', s)
     # 선행 점 소수 보정: .063 → 0.063 (알파벳/숫자 직후 점은 구분자이므로 제외)
     s = re.sub(r'(?<![A-Z\d.])\.(\d)', r'0.\1', s)
     # 숫자 직후 M 단위가 키워드로 이어지면 공백 삽입: 6.0MGRADE → 6.0M GRADE
@@ -351,6 +353,10 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\bNO\.\s*OF\s*BUNDLES?\s*:\s*\d+', '', s, flags=re.IGNORECASE)
     # {n}BUNDLES {m}[L] 묶음+총수량 제거: 29BUNDLES 786L, 13BUNDLES 500 → '' (치수 아님)
     s = re.sub(r'\b\d+\s*BUNDLES?\b(?:\s+\d+L?)?\b', '', s, flags=re.IGNORECASE)
+    # EN 구조강 등급 제거: S355J2H, S235JR, S690Q → '' (강도+충격기호 조합, 치수 아님)
+    s = re.sub(r'\bS\d{3}[A-Z]\d?[A-Z]?\b', '', s, flags=re.IGNORECASE)
+    # (nEA), (nPCS) 수량 괄호 제거: (2EA), (3PCS) → '' (치수 아님)
+    s = re.sub(r'\(\s*\d+\s*(?:EA|PCS?|NOS?)\s*\)', '', s, flags=re.IGNORECASE)
     # SIZE:{n}(A|KG) 단위중량 표기 제거: SIZE:37ALENGTH → SIZE:LENGTH (단위중량은 치수 아님)
     s = re.sub(r'(?<=SIZE:)\d+(?:A|KG)(?=[A-Z])', '', s, flags=re.IGNORECASE)
     # BATCH NO: 로트번호 제거: BATCH NO:M1SW231037 → ''
