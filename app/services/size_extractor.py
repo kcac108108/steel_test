@@ -120,7 +120,7 @@ def _normalize(s: str) -> str:
     # MMM 이상 중복 M → MM 통일: 3.15MMM → 3.15MM
     s = re.sub(r'M{3,}', 'MM', s, flags=re.IGNORECASE)
     # 선행 점 소수 보정: .063 → 0.063 (알파벳/숫자 직후 점은 구분자이므로 제외)
-    s = re.sub(r'(?<![A-Z\d])\.(\d)', r'0.\1', s)
+    s = re.sub(r'(?<![A-Z\d.])\.(\d)', r'0.\1', s)
     # 숫자 직후 M 단위가 키워드로 이어지면 공백 삽입: 6.0MGRADE → 6.0M GRADE
     s = re.sub(r'(?<=\d)(M)(?=GRADE|SPEC|SHAPE|MODEL|TEMPER|HEAT|CERT)', r'\1 ', s, flags=re.IGNORECASE)
     # 치수-MT: 분리: 237MT:STAINLESS → 237 MT:STAINLESS (키워드 strip이 정확히 동작하도록)
@@ -313,7 +313,7 @@ def _normalize(s: str) -> str:
     )
     # FNCLM-V{bore}-D{OD}-L{len}-... 라벨형 칼라 코드 치수 변환: FNCLM-V12.0-D30-L12-CC2 → 30MM X 12MM
     s = re.sub(
-        r'\bFNCLM-V[\d.]+-D(\d+)-L(\d+)(?:-[A-Z]+\d*)*\b',
+        r'\bFNCLM-V[\d.]+-D(\d+)-L(\d+(?:\.\d+)?)(?:-[A-Z]+\d*)*\b',
         lambda m: f'{m.group(1)}MM X {m.group(2)}MM',
         s, flags=re.IGNORECASE
     )
@@ -349,6 +349,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'/\s*PC(?:\s*NO\.\s*OF\s*BUNDLES?\s*:\s*\d+)?', '', s, flags=re.IGNORECASE)
     # 독립 NO. OF BUNDLES:{n} 묶음 수량 제거 (치수 아님)
     s = re.sub(r'\bNO\.\s*OF\s*BUNDLES?\s*:\s*\d+', '', s, flags=re.IGNORECASE)
+    # {n}BUNDLES {m}[L] 묶음+총수량 제거: 29BUNDLES 786L, 13BUNDLES 500 → '' (치수 아님)
+    s = re.sub(r'\b\d+\s*BUNDLES?\b(?:\s+\d+L?)?\b', '', s, flags=re.IGNORECASE)
     # SIZE:{n}(A|KG) 단위중량 표기 제거: SIZE:37ALENGTH → SIZE:LENGTH (단위중량은 치수 아님)
     s = re.sub(r'(?<=SIZE:)\d+(?:A|KG)(?=[A-Z])', '', s, flags=re.IGNORECASE)
     # BATCH NO: 로트번호 제거: BATCH NO:M1SW231037 → ''
@@ -820,7 +822,7 @@ def _clean_size_block(block: str) -> str:
     # 하이픈+연도 제거: A333M-2024 → A333M (-2024 = 규격 개정년도)
     block = re.sub(r'-(?:19|20)\d{2}\b', '', block)
     # {n}BUNDLES 수량 제거: 13BUNDLES, 4BUNDLES → '' (수량 표기, 치수 아님)
-    block = re.sub(r'\b\d+\s*BUNDLES?\b', '', block, flags=re.IGNORECASE)
+    block = re.sub(r'\b\d+\s*BUNDLES?\b(?:\s+\d+)?', '', block, flags=re.IGNORECASE)
     # /{grade} 강종 코드 접미사 제거: 1.5IN/434MR → 1.5IN (치수 뒤 슬래시+강종코드)
     block = re.sub(r'(?<=[A-Z\d])/\d{3,4}[A-Z]{0,3}\b', '', block)
     # 끝 치수에 붙은 스테인리스 강종 접미사 제거: X50316L → X50 (316L = SUS강종)
