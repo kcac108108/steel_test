@@ -98,6 +98,8 @@ def _normalize(s: str) -> str:
     s = s.replace('_', ' ')
     # Ø/⌀/Φ (직경 기호) → DIA
     s = s.replace('Ø', 'DIA').replace('⌀', 'DIA').replace('Φ', 'DIA').replace('φ', 'DIA')
+    # × (Unicode 곱셈 기호 U+00D7) → X (치수 구분자 통일)
+    s = s.replace('×', 'X')
     # W/L 레이블 뒤 천단위 쉼표 제거 (European decimal 변환 전에 먼저 처리)
     # W 1,255MM → W 1255MM, L 4,620MM → L 4620MM (폭/길이는 천단위 구분자)
     s = re.sub(r'\b(W|L)\s+(\d{1,4}),(\d{3})(MM|CM|IN|FT)\b', r'\1 \2\3\4', s, flags=re.IGNORECASE)
@@ -294,6 +296,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\(\s*[±]\s*[\d.]+\s*(?:MM|CM|IN(?:CH)?)?\s*\)', '', s, flags=re.IGNORECASE)
     # 치수 뒤 순수 숫자 괄호 제거: 20.79(18.83)X → 20.79X (OD 뒤 내경/내치수 괄호 표기)
     s = re.sub(r'(?<=[\d])\s*\(\s*[\d.]+\s*\)(?=\s*(?:[Xx*\s]|$))', '', s)
+    # 단독 인치 공차 괄호 제거: (0.004INCH), (0.004") → '' (공차 표기, 치수 아님)
+    s = re.sub(r'\(\s*[\d.]+\s*(?:INCH?|")\s*\)', '', s, flags=re.IGNORECASE)
     # {n}/{m}HD/HN/HR 경도 표기 제거: 1/8HD, 1/4HN, 1/2HR → '' (치수가 아닌 경도 코드)
     s = re.sub(r'\b\d+/\d+H[DNR]\b', '', s, flags=re.IGNORECASE)
     # McMaster/Grainger 카탈로그 번호 제거: 1162K39, 50415K25, 89785K845
@@ -303,6 +307,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\b[A-WY-Z]\d{3,4}[A-WY-Z]\d{2,3}\b', '', s, flags=re.IGNORECASE)
     # AMS 재료 규격코드 제거: AMS 5643, AMS5670H/5671H → '' (미군 재료규격, 치수 아님)
     s = re.sub(r'\bAMS\s*\d{4,5}[A-Z]?(?:/\d{4,5}[A-Z]?)?\b', '', s, flags=re.IGNORECASE)
+    # UNS 합금 번호 제거: UNS N06625, UNS#N07718 → '' (합금 통합번호, 치수 아님)
+    s = re.sub(r'\bUNS#?\s*[A-Z]\d{5}\b', '', s, flags=re.IGNORECASE)
     # HIGHPERRM {n} 소재명 뒤 숫자 제거: HIGHPERRM 49 → '' (치수 아닌 합금계열 인덱스)
     s = re.sub(r'\bHIGHPERRM\s+\d+\b', '', s, flags=re.IGNORECASE)
     # EN 규격코드 제거: EN 10269, EN10060 → '' (유럽 강재규격, 5자리 숫자)
@@ -374,7 +380,15 @@ def _normalize(s: str) -> str:
         # ALLOY {n} 뒤 단독 숫자 합금 번호 제거: ALLOY 22 → ALLOY, ALLOY 718 → ALLOY
         s = re.sub(r'(?<=\bALLOY\s)\d{2,4}\b', '', s, flags=re.IGNORECASE)
     # @ {n}°F/°C 열처리/어닐링 온도 제거: Annealed @ 1800°F → '' (치수 아닌 열처리 조건)
-    s = re.sub(r'@\s*\d{3,4}\s*°?\s*[FC]\b', '', s, flags=re.IGNORECASE)
+    # [^a-zA-Z0-9\s]* 는 °·‽ 같은 특수문자(도 기호, 인코딩 깨진 문자) 허용
+    s = re.sub(r'@\s*[^a-zA-Z0-9\s]*\d{3,4}[^a-zA-Z0-9\s]*[FC]\b', '', s, flags=re.IGNORECASE)
+    # NI {n} 단독 합금 계열 번호 제거: NI 42, NI 36 → '' (NI42/CR chain 패턴과 구별: 슬래시 없는 경우만)
+    s = re.sub(r'\bNI\s+\d{2,3}\b(?!\s*/)', '', s, flags=re.IGNORECASE)
+    # {n} IN ({m}MM) → {m}MM 변환: 10 IN (254MM) → 254MM (인치 표기 뒤 괄호 내 MM 값 채택)
+    s = re.sub(r'\b\d+(?:\.\d+)?\s*IN\s*\(\s*(\d+(?:\.\d+)?)\s*MM\s*\)', r'\1MM', s, flags=re.IGNORECASE)
+    # NIKROTHAL 브랜드 내 N{n} 합금 등급 제거: NIKROTHAL STRIP N80 → NIKROTHAL STRIP (80은 Ni 함량)
+    if re.search(r'\bNIKROTHAL\b', s, re.IGNORECASE):
+        s = re.sub(r'\bN\d{2,3}\b', '', s, flags=re.IGNORECASE)
     # OD:A*B*C → OD:A*C (외경*내경*길이에서 내경 제거): OD:55*25.5*147 → OD:55*147
     s = re.sub(r'\bOD\s*:?\s*([\d.]+)\s*\*\s*[\d.]+\s*\*\s*([\d.]+)', r'OD:\1*\2', s, flags=re.IGNORECASE)
     # SA/SB {grade}-P{class} ASME 파이프 등급 제거: SA335-P22, SA335-P92, SB407-N08810 → ''
@@ -401,6 +415,10 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\bNO\.\s*OF\s*BUNDLES?\s*:\s*\d+', '', s, flags=re.IGNORECASE)
     # {n}BUNDLES {m}[L] 묶음+총수량 제거: 29BUNDLES 786L, 29BUNDLES786L, 13BUNDLES 500 → ''
     s = re.sub(r'\b\d+\s*BUNDLES?\s*(?:\d+L?)?\b', '', s, flags=re.IGNORECASE)
+    # {n}PIECES 수량 제거: 131PIECES, 125PIECES → ''
+    s = re.sub(r'\b\d+\s*PIECES?\b', '', s, flags=re.IGNORECASE)
+    # LENGTH(M):{n} 총길이(미터) 표기 제거: LENGTH(M):786 → '' (개별 절단길이 아닌 총 파이프 길이)
+    s = re.sub(r'\bLENGTH\s*\(\s*M\s*\)\s*:\s*[\d.]+\b', '', s, flags=re.IGNORECASE)
     # NOT MOR(E) THAN {n}MM 규격 상한 표기 제거: CROSS-SECTION/NOT MOR THAN 114.3MM → '' (오타 포함)
     s = re.sub(r'\bNOT\s+MOR(?:E)?\s+THAN\b.*', '', s, flags=re.IGNORECASE)
     # 와이어로프 구조코드 제거: +IWRC, IWRC6, 6XFI(25), FI(29), O/O (치수가 아닌 구성코드)
@@ -410,14 +428,14 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\b\d+[Xx*]FI\(\d+\)\b', '', s, flags=re.IGNORECASE)
     s = re.sub(r'\bFI\(\d+\)\b', '', s, flags=re.IGNORECASE)
     s = re.sub(r'\bO/O\b', '', s, flags=re.IGNORECASE)
-    # GALV./WIRE/ROPE/CABLE 맥락 구성코드 제거
-    if re.search(r'\b(?:GALV|WIRE|ROPE|CABLE)\b', s, re.IGNORECASE):
-        s = re.sub(r'\+\d+FC', '', s, flags=re.IGNORECASE)                   # +7FC 섬유코어
-        # WIRE ROPE 업계 표준 스트랜드 구성코드 명시 제거: 1X7, 7X7, 6X29(FI), 6X36(WS) 등
-        s = re.sub(r'\b(?:1[Xx]7|7[Xx]7|6[Xx]7|6[Xx]12|6[Xx]19|6[Xx]24|6[Xx]25|6[Xx]29|6[Xx]36|7[Xx]19|1[Xx]19)(?:\([A-Z]+\))?\b',
+    # GALV./WIRE/ROPE/CABLE/UNGALV 맥락 구성코드 제거
+    if re.search(r'\b(?:GALV|UNGALV|WIRE|ROPE|CABLE)\b', s, re.IGNORECASE):
+        s = re.sub(r'\+\d*(?:FC|PP|NFC)', '', s, flags=re.IGNORECASE)         # +7FC/+7PP/+NFC/+NFC 섬유코어 (숫자 없는 +NFC 포함)
+        # WIRE ROPE 업계 표준 스트랜드 구성코드 명시 제거: 1X7, 7X7, 6X29(FI), 8X19 등
+        s = re.sub(r'\b(?:1[Xx]7|7[Xx]7|6[Xx]7|6[Xx]12|6[Xx]19|6[Xx]24|6[Xx]25|6[Xx]29|6[Xx]36|7[Xx]19|1[Xx]19|8[Xx]19|8[Xx]7)(?:\([A-Z]+\))?[A-Z]?\b',
                    '', s, flags=re.IGNORECASE)
-        s = re.sub(r'\b\d{1,2}[Xx]\d{1,2}(?=\d)', '', s, flags=re.IGNORECASE)  # 7X73.18 직결 잔류분
-        s = re.sub(r'[Xx*]\s*\d{5,}\s*MM\b', '', s, flags=re.IGNORECASE)    # X100000MM/*1000000MM 총길이
+        s = re.sub(r'(?<!\.)\b\d{1,2}[Xx]\d{1,2}(?=\d)', '', s, flags=re.IGNORECASE)  # 7X73.18 직결 잔류분 (소수점 뒤 보호)
+        s = re.sub(r'[Xx*]\s*\d{6,}\s*MM\b', '', s, flags=re.IGNORECASE)    # X1000000MM/*1000000MM 총길이 (100m+ 제거, 45m 피스 보존)
         if re.search(r'\bCABLE\b', s, re.IGNORECASE):
             s = re.sub(r'^\d{5,6}\b\s*', '', s.strip())                    # CABLE 선두 카탈로그번호
     # DRY 와이어 맥락: {quantity}X{length}M{construction} {diameter}MM DRY 형태에서 직경만 추출
@@ -428,8 +446,8 @@ def _normalize(s: str) -> str:
             s = dry_m.group(1) + 'MM'
     # CONSTRUCTION 키워드 이후 제거: CONSTRUCTION 7 X 19 X 0.25 MM (와이어 구성코드 블록)
     s = re.sub(r'\bCONSTRUCTION\b.*', '', s, flags=re.IGNORECASE)
-    # MM2/MM² 전선 단면적 제거: 10 MM2 → '' (전기 와이어 단면적, 치수 아님)
-    s = re.sub(r'\b\d+\.?\d*\s*MM2\b', '', s, flags=re.IGNORECASE)
+    # MM2/MM² 전선/강도 단면적 제거: 10 MM2, 1570/1770MM2 → '' (단면적 또는 인장강도, 치수 아님)
+    s = re.sub(r'\b\d+(?:\.\d+)?(?:/\d+)?\s*MM2\b', '', s, flags=re.IGNORECASE)
     # (1.XXXX) 유럽 재료번호 괄호 제거: (1.4401), (1.4307) → ''
     s = re.sub(r'\(\s*1\.\d{4}\s*\)', '', s)
     # 유럽 소수점 1자리 + 공백 + 단위: 5,0 MM → 5.0 MM (기존 규칙은 단위 직결만 처리)
@@ -1501,6 +1519,13 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
         rope_m = re.search(r'([\d/]+)"\s*ROPE\s*DIAMETER,?\s*([\d/]+)"\s*LONG', text, re.IGNORECASE)
         if rope_m:
             return f'{rope_m.group(1)}INX{rope_m.group(2)}IN'
+        # 직경만 MM 단독 표기: LANYARD 10 IN (254MM) → 254
+        lan_mm = re.search(r'([\d.]+)\s*MM\b', text, re.IGNORECASE)
+        if lan_mm:
+            try:
+                return f'{float(lan_mm.group(1)):g}'
+            except ValueError:
+                return lan_mm.group(1)
 
     # CANNULA BLANK / BIOPSY CANNULA: NN GA [TW/RW] X N.NNN["?] → 길이만 추출 (게이지 무시)
     if re.search(r'CANNULA\b', text, re.IGNORECASE):
@@ -1837,8 +1862,8 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
     if nom_mm_pipe:
         return f'{nom_mm_pipe.group(1)}X{nom_mm_pipe.group(2)}X{nom_mm_pipe.group(3)}'
 
-    # WIRE ROPE / WR 핸들러: 직경(+길이) 추출
-    if re.search(r'\b(?:WIRE\s+ROPE|WR)\b', text, re.IGNORECASE):
+    # WIRE ROPE / WR / UNGALV 핸들러: 직경(+길이) 추출 (UNGALV=ungalvanized 와이어 로프 포함)
+    if re.search(r'\b(?:WIRE\s+ROPE|WR|UNGALV)\b', text, re.IGNORECASE):
         # OD/DIA/PHI 명시 직경 우선
         wr_od_m = re.search(r'(?:OD|DIA|PHI)\s*([\d.]+)', text, re.IGNORECASE)
         if wr_od_m:
