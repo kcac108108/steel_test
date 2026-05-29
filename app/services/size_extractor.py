@@ -105,7 +105,7 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\b(W|L)\s+(\d{1,4}),(\d{3})(MM|CM|IN|FT)\b', r'\1 \2\3\4', s, flags=re.IGNORECASE)
     # PLATE/SHEET 맥락 1자리+콤마+3자리: 천단위 구분자 (먼저 처리, 유럽식 소수점 규칙 전에)
     # 예: 1,277MM X → 1277MM (판재 폭/길이, 단 비-PLATE 맥락은 아래 유럽식 소수점 규칙으로)
-    if re.search(r'\bPLATE\b', s, re.IGNORECASE):
+    if re.search(r'\bPLATES?\b', s, re.IGNORECASE):
         s = re.sub(r'\b([1-9]),(\d{3})(MM)\b', r'\1\2\3', s, flags=re.IGNORECASE)
     # 유럽식 소수점 쉼표: 3,100MM X → 3.100MM X (뒤에 X가 있을 때만 변환, 천단위 콤마와 구분)
     # L:4,825MM처럼 단독으로 끝나는 경우는 천단위 콤마로 간주
@@ -115,6 +115,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'(?<![A-Z\d])(\d{1,3}),(\d{3})(?!\d)', r'\1\2', s)
     # X 뒤 천단위 콤마 제거: 120MMX6,700MM → 120MMX6700MM
     s = re.sub(r'(?<=[Xx])(\d{1,3}),(\d{3})(?!\d)', r'\1\2', s)
+    # AMS 공차 코드 제거: 0.079T( → '' [AMS5599-0.079T(0.79"X48"X144") 공차 접두코드]
+    s = re.sub(r'(?<![A-Z\d])\d+\.\d+T(?=\()', '', s, flags=re.IGNORECASE)
     # 두께/직경 접미사 T/D 제거: 0.4T → 0.4, 48.6D → 48.6, 6T → 6 (정수 포함)
     # 단, 알파벳/하이픈 직후 T는 강종코드이므로 제외 (S45C-T, 3/4H-T 등)
     s = re.sub(r'(\d+\.\d+)[TD](?=[X\s,*/]|$)', r'\1', s)
@@ -391,6 +393,14 @@ def _normalize(s: str) -> str:
         s = re.sub(r'\bN\d{2,3}\b', '', s, flags=re.IGNORECASE)
     # OD:A*B*C → OD:A*C (외경*내경*길이에서 내경 제거): OD:55*25.5*147 → OD:55*147
     s = re.sub(r'\bOD\s*:?\s*([\d.]+)\s*\*\s*[\d.]+\s*\*\s*([\d.]+)', r'OD:\1*\2', s, flags=re.IGNORECASE)
+    # CONARC 용접봉 전용 코드 제거: 511420-2 CONARC 49C 2.5X350XVPMD(RO) → 2.5X350
+    if re.search(r'\bCONARC\b', s, re.IGNORECASE):
+        s = re.sub(r'^\d{5,7}-\d{1,2}\s+', '', s.strip(), flags=re.IGNORECASE)   # 선두 카탈로그번호
+        s = re.sub(r'\bCONARC\s+\d+[A-Z]?\b', '', s, flags=re.IGNORECASE)         # CONARC 49C 브랜드+강종
+        s = re.sub(r'[Xx]?VPMD\s*\([A-Z]+\)', '', s, flags=re.IGNORECASE)          # XVPMD(RO) 포장코드
+    # H242 RPB{n}N{digits} NICKEL ALLOY STRIP 부품코드 제거: H242 RPB500N06000010.00600" → .00600"
+    if re.search(r'NICKEL\s+ALLOY\s+STRIP\b', s, re.IGNORECASE):
+        s = re.sub(r'\bH\d+\s+RPB\d+[A-Z]\d+\b', '', s, flags=re.IGNORECASE)
     # SA/SB {grade}-P{class} ASME 파이프 등급 제거: SA335-P22, SA335-P92, SB407-N08810 → ''
     s = re.sub(r'\bS[AB]\s*-?\s*\d{2,3}[-/][A-Z]\d{1,2}\b', '', s, flags=re.IGNORECASE)
     # ASTM 규격코드 제거: ASTM-B-637, ASTM A312 → '' (미국 재료규격)
@@ -415,10 +425,11 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\bNO\.\s*OF\s*BUNDLES?\s*:\s*\d+', '', s, flags=re.IGNORECASE)
     # {n}BUNDLES {m}[L] 묶음+총수량 제거: 29BUNDLES 786L, 29BUNDLES786L, 13BUNDLES 500 → ''
     s = re.sub(r'\b\d+\s*BUNDLES?\s*(?:\d+L?)?\b', '', s, flags=re.IGNORECASE)
-    # {n}PIECES 수량 제거: 131PIECES, 125PIECES → ''
+    # {n}PIECES LENGTH(M):{m} 묶음수+총파이프길이 함께 제거: 131PIECES LENGTH(M):786 → ''
+    # 주의: LENGTH(M):{m} 단독(PIECES 없음)은 개별 피스 길이이므로 제거하지 않음
+    s = re.sub(r'\b\d+\s*PIECES?\s+LENGTH\s*\(\s*M\s*\)\s*:\s*[\d.]+\b', '', s, flags=re.IGNORECASE)
+    # {n}PIECES 독립 수량 제거: 131PIECES (위 패턴으로 처리 안 된 잔류분)
     s = re.sub(r'\b\d+\s*PIECES?\b', '', s, flags=re.IGNORECASE)
-    # LENGTH(M):{n} 총길이(미터) 표기 제거: LENGTH(M):786 → '' (개별 절단길이 아닌 총 파이프 길이)
-    s = re.sub(r'\bLENGTH\s*\(\s*M\s*\)\s*:\s*[\d.]+\b', '', s, flags=re.IGNORECASE)
     # NOT MOR(E) THAN {n}MM 규격 상한 표기 제거: CROSS-SECTION/NOT MOR THAN 114.3MM → '' (오타 포함)
     s = re.sub(r'\bNOT\s+MOR(?:E)?\s+THAN\b.*', '', s, flags=re.IGNORECASE)
     # 와이어로프 구조코드 제거: +IWRC, IWRC6, 6XFI(25), FI(29), O/O (치수가 아닌 구성코드)
@@ -467,7 +478,8 @@ def _normalize(s: str) -> str:
     # {fraction}CUT 절단 지정 제거: 1/2CUT, 1/2CUTHEAT → '' (뒤 word boundary 없이 처리)
     s = re.sub(r'\b\d+/\d+\s*CUT', '', s, flags=re.IGNORECASE)
     # CUT:{n}L+BALANCE 절단+잔량 지정 제거: BARCUT:1500L+BALANCE → BAR (1500은 치수 아닌 절단 지시)
-    s = re.sub(r'\bCUT\s*:\s*[\d.]+[LM]\b\s*\+\s*BALANCE\b', '', s, flags=re.IGNORECASE)
+    # \b 미사용: BARCUT:처럼 CUT 앞에 word char가 붙어도 처리
+    s = re.sub(r'CUT\s*:\s*[\d.]+[LM]\b\s*\+\s*BALANCE\b', '', s, flags=re.IGNORECASE)
     # SP-CUT 특수절단 코드 제거: SP-CUT → ''
     s = re.sub(r'\bSP-CUT\b', '', s, flags=re.IGNORECASE)
     # PMI{n} 양성적 소재 확인 번호 제거: PMI39, PMI40 → '' (치수 아님)
@@ -497,12 +509,16 @@ def _normalize(s: str) -> str:
     s = re.sub(r'(\d+)\.\.(\d+)', r'\1.\2', s)
     # NTI-{숫자}{알파} 모델 suffix 제거: NTI-2R → '' (제품 시리즈 코드)
     s = re.sub(r'\bNTI-\d+[A-Z]?\b', '', s, flags=re.IGNORECASE)
+    # TUBE OD/ID 이중직경 표기: R25/12,5X90 → 25X90 (R{OD}/{ID}, 유럽식 콤마 소수점 포함)
+    s = re.sub(r'\bR(\d+(?:\.\d+)?)/[\d,]+', r'\1', s, flags=re.IGNORECASE)
     # ST 제거 후 남는 R{n}X{n} 앞 R 접두사 제거: R66X8.5 → 66X8.5 (독일어 Rohr=관)
     s = re.sub(r'(?:^|\s)R(?=\d+[Xx][\d.])', r' ', s.strip(), flags=re.IGNORECASE)
     # 중량 표기 제거: 25KG, 226.8KG → '' (코일 단위중량, 치수 아님)
     s = re.sub(r'\b\d+(?:\.\d+)?\s*KG\b(?![\s/]*M\b)', '', s, flags=re.IGNORECASE)
     # 괄호 내 참조번호 제거: [#1125301] → ''
     s = re.sub(r'\[\s*#\d+\s*\]', '', s)
+    # 선행 소수점 0 보완 (코드 제거 후 잔류): .00600" → 0.00600"
+    s = re.sub(r'(?<![A-Z\d.])\.(\d)', r'0.\1', s)
     return re.sub(r'\s+', ' ', s)
 
 
@@ -1048,6 +1064,20 @@ def _extract_size_block(text: str) -> Optional[str]:
         text, re.IGNORECASE
     )
     if not m:
+        # SIZE {n} X {m} [unit] — 구분자 없는 형태 (예: SUPRA STRIP SIZE 9.00 X 2000 MM)
+        size_nodel_m = re.search(
+            r'\bSIZE\s+([\d.]+)\s*[Xx]\s*([\d.]+)(?:\s*[Xx]\s*([\d.]+))?\s*(MM|CM|IN|FT)?\b',
+            text, re.IGNORECASE
+        )
+        if size_nodel_m:
+            vals = [size_nodel_m.group(1), size_nodel_m.group(2)]
+            if size_nodel_m.group(3):
+                vals.append(size_nodel_m.group(3))
+            try:
+                vals = [f'{float(v):g}' for v in vals]
+            except ValueError:
+                pass
+            return 'X'.join(vals)
         return None
 
     block = _clean_size_block(m.group(1).strip().rstrip('.,;'))
@@ -1068,9 +1098,9 @@ def _extract_size_block(text: str) -> Optional[str]:
         return f'{dl_m.group(1)}X{dl_m.group(2)}'
 
     # THICKNESS N.NNMM, WIDTH/W NNNN.NNMM 전문 라벨: THICKNESS 9.00MM, WIDTH 2000.00MM → 9X2000
-    # _normalize가 WIDTH → W로 변환하므로 W도 허용
+    # _normalize가 THICKNESS→T, WIDTH→W로 변환하므로 T/W 약어도 허용
     thkw_m = re.match(
-        r'^THICKNESS\s+([\d.]+)\s*MM,?\s*(?:WIDTH\s+|W\s*)([\d.]+)\s*MM\s*$',
+        r'^(?:THICKNESS\s+|T\s?)([\d.]+)\s*MM,?\s*(?:WIDTH\s+|W\s?)([\d.]+)\s*MM\s*$',
         block.strip(), re.IGNORECASE
     )
     if thkw_m:
@@ -1235,6 +1265,43 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
             g = f'{float(s):g}'
             return g if '.' in g else f'{float(s):.3f}'
         return f'{_fmt_ic(inch_coil_m.group(1))}INX{_fmt_ic(inch_coil_m.group(2))}INXC'
+
+    # ALLOY COIL 공차 범위 패턴: T {a}"/{b}" X {w}" W ... → {b}INX{w}INXC
+    # 예: ALLOY X-750 ... T 0.0036"/0.00644" X 12.00" W → 0.00644INX12.00INXC
+    if re.search(r'\bALLOY\b.*COIL', text, re.IGNORECASE):
+        alloy_coil_m = re.search(
+            r'\bT\s+(?:[\d.]+"/)?([\d.]+)"\s*[Xx]\s*([\d.]+)"\s*W',
+            text, re.IGNORECASE
+        )
+        if alloy_coil_m:
+            t_ac = alloy_coil_m.group(1)
+            w_ac = alloy_coil_m.group(2)
+            try:
+                t_ac = f'{float(t_ac):g}'
+            except ValueError:
+                pass
+            return f'{t_ac}INX{w_ac}INXC'
+
+    # BA STRIP 전용 핸들러: BA STRIP {t}[MM] [X {w}W] [X C] → {t}X{w}XC 또는 {t}
+    # 예: UNS N06625 BA STRIP 0.152 X 480W X C → 0.152X480XC
+    # 예: UNS N06625 BA STRIP 0.102 X C → 0.102
+    if re.search(r'\bBA\s+STRIP\b', text, re.IGNORECASE):
+        ba_t = re.search(r'\bBA\s+STRIP\s+([\d.]+)', text, re.IGNORECASE)
+        if ba_t:
+            t_ba = ba_t.group(1)
+            try:
+                t_ba = f'{float(t_ba):g}'
+            except ValueError:
+                pass
+            ba_w = re.search(r'([\d.]+)\s*(?:MM\s*)?W\b', text, re.IGNORECASE)
+            if ba_w and ba_w.group(1) != ba_t.group(1):
+                w_ba = ba_w.group(1)
+                try:
+                    w_ba = f'{float(w_ba):g}'
+                except ValueError:
+                    pass
+                return f'{t_ba}X{w_ba}XC'
+            return t_ba
 
     # {code} Plate N x N x Nmm 형식 (유럽식 구매주문서): 1R0053322 Plate 3 x 1500 x3000mm → 3X1500X3000
     plate_xyz_m = re.search(
@@ -1519,6 +1586,10 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
         rope_m = re.search(r'([\d/]+)"\s*ROPE\s*DIAMETER,?\s*([\d/]+)"\s*LONG', text, re.IGNORECASE)
         if rope_m:
             return f'{rope_m.group(1)}INX{rope_m.group(2)}IN'
+        # DIA + LG 패턴: 3/64 DIA NYLON COATED 6"LG → 3/64INX6IN
+        dia_lg_m = re.search(r'([\d/]+)\s+DIA\b.*?([\d./]+)\s*"?\s*LG\b', text, re.IGNORECASE)
+        if dia_lg_m:
+            return f'{dia_lg_m.group(1)}INX{dia_lg_m.group(2)}IN'
         # 직경만 MM 단독 표기: LANYARD 10 IN (254MM) → 254
         lan_mm = re.search(r'([\d.]+)\s*MM\b', text, re.IGNORECASE)
         if lan_mm:
@@ -1527,17 +1598,60 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
             except ValueError:
                 return lan_mm.group(1)
 
+    # PRODUCT DIMENSIONS {dia} DIA X {len} IN LONG: 잉곳/바 단순 직경×길이
+    # 예: PRODUCT DIMENSIONS 3 DIA X 18 IN LONG → 3X18IN
+    pd_dim_m = re.search(
+        r'PRODUCT\s+DIMENSIONS?\s+([\d./]+)\s+DIA\s+[Xx]\s+([\d./]+)\s+IN\b',
+        text, re.IGNORECASE
+    )
+    if pd_dim_m:
+        return f'{pd_dim_m.group(1)}X{pd_dim_m.group(2)}IN'
+
+    # WIRE TURNBUCKLE {frac}*{n}MM*{l}M(M): 인치 분수 OD × 두께 × 길이
+    # 예: 3/4*8MM*6M (L) → 3/4INX8X6000
+    if re.search(r'\bTURNBUCKLE\b', text, re.IGNORECASE):
+        tb_m = re.search(
+            r'\b(\d+/\d+)\s*\*\s*([\d.]+)\s*MM\s*\*\s*([\d.]+)\s*(MM\b(?!M)|M\b(?!M))',
+            text, re.IGNORECASE
+        )
+        if tb_m:
+            frac, size2, l_raw, l_unit = tb_m.groups()
+            l_val = _convert_unit(l_raw, l_unit.upper().replace(' ', ''))
+            return f'{frac}INX{size2}X{l_val}'
+
+    # WALL PIPE: {h}X{w}X{wall} WALL X {len}M(ETER) → {max(h,w)}INX{wall}INX{len*1000}
+    # 예: 8X4X1/2 WALL X 6METER137316ASTM A500 → 8INX1/2INX6000
+    if re.search(r'\bWALL\b', text, re.IGNORECASE) and re.search(r'\bPIPE\b', text, re.IGNORECASE):
+        wall_m = re.search(
+            r'\b(\d+(?:\.\d+)?)\s*[Xx]\s*(\d+(?:\.\d+)?)\s*[Xx]\s*(\d+/\d+|\d+(?:\.\d+)?)\s+WALL\s+[Xx]\s*([\d.]+)\s*M(?:ETER)?',
+            text, re.IGNORECASE
+        )
+        if wall_m:
+            h, w, wall, l_raw = wall_m.groups()
+            l_val = _convert_unit(l_raw, 'M')
+            try:
+                od = h if float(h) >= float(w) else w
+            except ValueError:
+                od = h
+            return f'{od}INX{wall}INX{l_val}'
+
     # CANNULA BLANK / BIOPSY CANNULA: NN GA [TW/RW] X N.NNN["?] → 길이만 추출 (게이지 무시)
     if re.search(r'CANNULA\b', text, re.IGNORECASE):
         ca_m = re.search(r'\d+\s*GA\.?\s*\w*\s*[Xx]\s*([\d.]+)"?', text, re.IGNORECASE)
         if ca_m:
             return f'{ca_m.group(1)}IN'
 
-    # BIOPSY STYLET: N.NNNN DIA. X N.NNN" → 직경X길이 (부품번호 제외)
+    # BIOPSY STYLET: N.NNNN DIA. X N.NNN" or 4자리코드DIA X N.NNN → 직경X길이 (부품번호 제외)
+    # 예: 0395DIA X 7.313 → 0.0395IN × 7.313IN (4자리 정수 = 0.XXXX인치)
     if re.search(r'BIOPSY\s+STYLET\b', text, re.IGNORECASE):
-        bs_m = re.search(r'([\d.]+)\s*DIA\.?\s*[Xx]\s*([\d.]+)"', text, re.IGNORECASE)
+        # 4자리 코드 형식: 0395(DIA) X 7.313 → 0.0395INX7.313IN
+        bs_4d = re.search(r'\b(\d{4})\s*(?:DIA\.?)?\s*[Xx]\s*([\d.]+)"?', text, re.IGNORECASE)
+        if bs_4d:
+            dia_val = f'{int(bs_4d.group(1)) / 10000:g}'
+            return f'{dia_val}INX{bs_4d.group(2)}IN'
+        bs_m = re.search(r'([\d.]+)\s*DIA\.?\s*[Xx]\s*([\d.]+)"?', text, re.IGNORECASE)
         if bs_m:
-            return f'{bs_m.group(1)}X{bs_m.group(2)}IN'
+            return f'{bs_m.group(1)}INX{bs_m.group(2)}IN'
 
     # SEAMLESS STEEL TUBES: 도면번호(/) 이후 실치수 추출
     # 예: ...PLAIN ENDS/13138-M0001-01 193.7 X 24.0 X 6150 → 193.7X24.0X6150
@@ -2072,8 +2186,9 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
         return f'{d}X{l}'
 
     # {n} DIA (단독 직경, 단위 없음): 20 DIA IN EXTERNAL DIAMETER → 20
+    # (?<![/\d]): 분수 분모 오인식 방지 (3/64 DIA에서 64 대신 3을 잡는 것 방지)
     if re.search(r'\bDIA\b', text, re.IGNORECASE) and not re.search(r'DIA\s*[\d.]', text, re.IGNORECASE):
-        n_dia_m = re.search(r'\b(\d+\.?\d*)\s+DIA\b', text, re.IGNORECASE)
+        n_dia_m = re.search(r'(?<![/\d])(\d+\.?\d*)\s+DIA\b', text, re.IGNORECASE)
         if n_dia_m:
             val = n_dia_m.group(1)
             try:
@@ -2444,10 +2559,10 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
             except ValueError:
                 return val
 
-    # 0-ae0. OD:{od}MM, WT:{wt}MM (DIN EN 10305 tube catalog): OD만 추출 (ID 무시)
-    # 예: OD:25.000MM, ID:10.000MM, WT:7.500MM → 25X7.5
+    # 0-ae0. OD:{od}MM, [ID:{id}MM,] WT:{wt}MM (DIN EN 10305 tube catalog): OD만 추출 (ID 무시)
+    # 예: OD:25.000MM, ID:10.000MM, WT:7.500MM → 25X7.5 (ID가 _normalize에 의해 제거돼도 동작)
     din_od_wt = re.search(
-        r'\bOD\s*:\s*([\d.]+)\s*MM[,\s]+ID\s*:\s*[\d.]+\s*MM[,\s]+WT\s*:\s*([\d.]+)\s*MM\b',
+        r'\bOD\s*:\s*([\d.]+)\s*MM[,\s]+(?:ID\s*:\s*[\d.]+\s*MM[,\s]+)?WT\s*:\s*([\d.]+)\s*MM\b',
         text, re.IGNORECASE
     )
     if din_od_wt:
@@ -2622,9 +2737,9 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
     # 1. SIZE: 키워드 블록
     result = _extract_size_block(text)
     if result:
-        # SHAPE:ROUNDBAR + SIZE:{dia}X{n}MM 에서 n이 2~12이면 미터 단위로 간주: 6→6000
+        # SHAPE:ROUND/CIRCULAR BAR + SIZE:{dia}X{n}MM 에서 n이 2~12이면 미터 단위로 간주: 6→6000
         # (예: SIZE:140*6MM → ROUNDBAR이므로 6M = 6000mm)
-        if re.search(r'SHAPE\s*:\s*ROUND\s*BAR', text, re.IGNORECASE):
+        if re.search(r'SHAPE\s*:\s*(?:ROUND|CIRCULAR)\s+BAR', text, re.IGNORECASE):
             rb_m = re.match(r'^([\d.]+)X(\d{1,2})$', result)
             if rb_m:
                 n = int(rb_m.group(2))
@@ -2994,6 +3109,10 @@ def _append_coil_if_shape(result: Optional[str], text: str) -> Optional[str]:
             # SHAPE: PIPE/TUBE → *C는 코일 표시 아님 (예: SEAMLESS COIL TUBE의 SHAPE:SEAMLESS PIPE)
             if re.search(r'SHAPE\s*:\s*(?:\w+\s+)*(?:PIPE|TUBE)\b', text, re.IGNORECASE):
                 return result
+            return result + 'XC'
+        # 말미 " X C" 코일 표시 (STRIP 컨텍스트 또는 MMW 직결): {n}MMW X C → XC 추가
+        # 예: 0.178MM X 389MMW X C → 0.178X389XC
+        if re.search(r'(?:MMW|W)\s+X\s+C\s*$', text, re.IGNORECASE):
             return result + 'XC'
     return result
 
