@@ -129,6 +129,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'(\d)\. (\d)', r'\1.\2', s)
     # 선행 점 소수 보정: .063 → 0.063 (알파벳/숫자 직후 점은 구분자이므로 제외)
     s = re.sub(r'(?<![A-Z\d.])\.(\d)', r'0.\1', s)
+    # X 뒤 선행 점 소수 보정: X.356 → X0.356 (치수 구분자 X 뒤 알파벳 직후 점)
+    s = re.sub(r'(?<=[Xx])\.(\d)', r'0.\1', s)
     # 숫자 직후 M 단위가 키워드로 이어지면 공백 삽입: 6.0MGRADE → 6.0M GRADE
     s = re.sub(r'(?<=\d)(M)(?=GRADE|SPEC|SHAPE|MODEL|TEMPER|HEAT|CERT)', r'\1 ', s, flags=re.IGNORECASE)
     # 치수-MT: 분리: 237MT:STAINLESS → 237 MT:STAINLESS (키워드 strip이 정확히 동작하도록)
@@ -207,9 +209,11 @@ def _normalize(s: str) -> str:
     # 중복 코일 스펙 트런케이션: N*NMM*C, N*NMM*C, ... → N*NMM*C (첫번째만 유지)
     # 예: 0.15*255MM*C, 0.15*210MM*C, COLD ROLLED-COIL → 0.15*255MM*C
     s = re.sub(r'([\d.]+\s*[*Xx]\s*[\d.]+\s*MM\s*[*Xx]\s*C)\s*,.*', r'\1', s, flags=re.IGNORECASE)
-    # LENGTH 천단위 쉼표 제거 후 L로 정규화: LENGTH4,870MM → L4870MM (_extract_twl 인식용)
+    # LENGTH/LG 천단위 쉼표 제거 후 L로 정규화: LENGTH4,870MM → L4870MM (_extract_twl 인식용)
     s = re.sub(r'\bLENGTH\s*(\d+),(\d{3})(?=\D|$)', r'L\1\2', s, flags=re.IGNORECASE)
     s = re.sub(r'\bLENGTH\s*:?\s*(?=\d)', 'L', s, flags=re.IGNORECASE)
+    # LG 레이블 → L 정규화: LG4000MM → L4000MM (한국/일본 강재 치수 표기, _extract_twl 인식용)
+    s = re.sub(r'\bLG\s*:?\s*(?=\d)', 'L', s, flags=re.IGNORECASE)
     # INNER DIAMETER/DIA 제거: 외경+내경 동시 표기 시 내경은 치수 불필요 (외경+두께가 정답)
     s = re.sub(r'\bINNER\s+(?:DIAMETER|DIA)\s*:?\s*[\d.]+\s*MM\b', '', s, flags=re.IGNORECASE)
     # OD 맥락에서 ID/CHD(내경)/R(반경)/H(공차등급) 제거: OD14 ID4.2, CHD:4.20MM, R13.000MM, H8
@@ -229,10 +233,17 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\bWIDTH\s*:?\s*(?=\d)', 'W', s, flags=re.IGNORECASE)
     # F{n}X{n}X{n}-{suffix} 부품형번 제거: F12X125X170-L, F12X125X170-2 → '' (실치수는 PLATE 뒤 별도 표기)
     s = re.sub(r'\bF(\d+(?:[Xx]\d+)+)-(?:[A-Z]\d*|\d+)\b', '', s, flags=re.IGNORECASE)
-    # USD 가격 괄호 제거: (USD8,859.20) → '' (와이어 로드 단가가 치수로 오추출 방지)
-    s = re.sub(r'\(USD[\d,.]+\)', '', s, flags=re.IGNORECASE)
-    # T{n}MMXW/XL 공백 삽입: T0.6MMXW1420MM → T0.6MM X W1420MM (_extract_twl 인식용)
-    s = re.sub(r'\bX([WL])(?=\d)', r'X \1', s, flags=re.IGNORECASE)
+    # USD 가격 괄호 제거: (USD8,859.20), (FOB CHARGE:USD413.14) → '' (단가/운임 치수 오추출 방지)
+    s = re.sub(r'\((?:FOB\s+CHARGE\s*:?\s*)?USD[\d,.]+\)', '', s, flags=re.IGNORECASE)
+    # AM{10+자리} 제품코드 제거: AM913202004179020 → '' (코일/강재 제품번호, 치수 오추출 방지)
+    s = re.sub(r'\bAM\d{10,}\b', '', s, flags=re.IGNORECASE)
+    # T{n}MM X {w}MM X L COIL → W 레이블 추가: _extract_twl이 trailing zero 보존하며 추출
+    # (COIL trailing zero strip 코드 통과 전에 TWL 경로로 유도)
+    s = re.sub(r'\bT([\d.]+)(MM)\s*[Xx]\s*([\d.]+)(MM)\s*[Xx]\s*L\s+COIL\b',
+               r'T\1\2 X W\3\4 X L COIL', s, flags=re.IGNORECASE)
+    # T{n}MMXW/XWT/XL 공백 삽입: XW1420→X W1420, XWT2.11→X WT2.11, XL4000→X L4000 (_extract_twl 인식용)
+    # (?<![A-Z]): 알파벳 직후 X는 제외 (MAXW 등 단어 내부 X 보호)
+    s = re.sub(r'(?<![A-Z])X(WT|[WL])(?=[\d.])', r'X \1', s, flags=re.IGNORECASE)
     # ALUSI 열간성형 코드 제거: HF-950-1300-MNB-S, TM-2014, REV6 (치수 아닌 재료 규격 코드)
     s = re.sub(r'\bHF-\d+-\d+(?:-\w+)*\b', '', s, flags=re.IGNORECASE)
     s = re.sub(r'\bTM-\d{4}\b', '', s, flags=re.IGNORECASE)
@@ -332,6 +343,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\b1\.\d{4}/\d{1,4}\b', '', s, flags=re.IGNORECASE)
     # KT{n} 제품 코드 제거: KT4, KT12 → '' (치수 아닌 제품 카테고리 코드)
     s = re.sub(r'\bKT\d{1,2}\b', '', s, flags=re.IGNORECASE)
+    # MATERIAL:O{n} 관재 재질코드 제거: MATERIAL:O54, MATERIAL:O61 → MATERIAL: (DIN/EN 관 소재등급)
+    s = re.sub(r'(?<=MATERIAL:)O\d{2,3}\b', '', s, flags=re.IGNORECASE)
     # KP{8+자리} 구매처 부품번호 제거: KP989690048936 → '' (Kaman 구매처 추적번호)
     s = re.sub(r'\bKP\d{8,}\b', '', s, flags=re.IGNORECASE)
     # KPW{alphanum} 칼라 카탈로그 코드 제거: KPW040MB026510 → ''
@@ -468,6 +481,27 @@ def _normalize(s: str) -> str:
         dry_m = re.search(r'([\d.]+)\s*MM\b(?=\s+DRY\b)', s, re.IGNORECASE)
         if dry_m:
             s = dry_m.group(1) + 'MM'
+    # SCS{n} 용접/납땜 와이어 등급코드 제거: SCS7 CORE WIRE → CORE WIRE (강종 아닌 제품 시리즈)
+    s = re.sub(r'\bSCS\d{1,2}\b', '', s, flags=re.IGNORECASE)
+    # CLF{4+자리} Castolin 브랜드 모델코드 제거: CLF5160 → ''
+    s = re.sub(r'\bCLF\d{4,}\b', '', s, flags=re.IGNORECASE)
+    # SR-{n}SUPER 솔더링 로드 브랜드 제거: SR-34SUPER → ''
+    s = re.sub(r'\bSR-\d+\w*\b', '', s, flags=re.IGNORECASE)
+    # LFM-{n} 납땜 합금 모델 제거: LFM-22 → ''
+    s = re.sub(r'\bLFM-\d+\b', '', s, flags=re.IGNORECASE)
+    # {n}% 플럭스/합금 퍼센트 제거: 3.5% → '' (와이어 구성 비율, 치수 아님)
+    # (?<!\.)\b: 소수점 뒤 숫자는 제외 (99.93%에서 93%만 제거되는 오작동 방지)
+    s = re.sub(r'(?<!\.)\b\d+(?:\.\d+)?%(?!\w)', '', s)
+    # P/O NO 이하 구매주문 참조 제거: P/O NO LTML26-NA0309 → ''
+    s = re.sub(r'\bP/O\s*NO\b.*', '', s, flags=re.IGNORECASE)
+    # THERMACLAD {n} 브랜드+모델 제거: THERMACLAD 457 → ''
+    s = re.sub(r'\bTHERMACLAD\s+\d+\b', '', s, flags=re.IGNORECASE)
+    # {n}# 파운드 중량 표기 제거: 75# → '', 500# → '' (납땜 와이어 스풀 중량, # 뒤 word boundary 없음)
+    s = re.sub(r'\b\d+#', '', s)
+    # POP{n}KG / POP {n}KG / 단독 POP 포장 표기 제거
+    s = re.sub(r'\bPOP\s*[\d.]*\s*(?:KG)?\b', '', s, flags=re.IGNORECASE)
+    # CP{4+자리} 솔더 제품코드 제거: CP2000, CP2000 → ''
+    s = re.sub(r'\bCP\d{4,}\b', '', s, flags=re.IGNORECASE)
     # CONSTRUCTION 키워드 이후 제거: CONSTRUCTION 7 X 19 X 0.25 MM (와이어 구성코드 블록)
     s = re.sub(r'\bCONSTRUCTION\b.*', '', s, flags=re.IGNORECASE)
     # MM2/MM² 전선/강도 단면적 제거: 10 MM2, 1570/1770MM2 → '' (단면적 또는 인장강도, 치수 아님)
@@ -1649,6 +1683,54 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
                 od = h
             return f'{od}INX{wall}INX{l_val}'
 
+    # SCH 파이프 괄호 실치수: 50AX SCH80X 6000MM (60.50MM*5.5MM) → 60.50X5.5X6000
+    # 공칭치수(NPS+SCH) 옆 괄호에 실OD×WT가 있을 때 우선 사용
+    sch_actual_m = re.search(
+        r'SCH\d+X?\s*([\d.]+)\s*MM\b[^(]*\(\s*([\d.]+)\s*MM\s*[*Xx]\s*([\d.]+)\s*MM\s*\)',
+        text, re.IGNORECASE
+    )
+    if sch_actual_m:
+        l, d1, d2 = sch_actual_m.groups()
+        return f'{d1}X{d2}X{l}'
+
+    # {n}MM OD + {n}MM WALL + {n}MM LENGTH 순서 보존: 6MM OD, 0.25MM WALL, 500MM → 6X0.25X500
+    od_wall_len_m = re.search(
+        r'([\d.]+)\s*MM\s+OD[,\s]+([\d.]+)\s*MM\s+WALL[^,\n]*[,\s]+([\d.]+)\s*MM\s+L(?:ENGTH)?\b',
+        text, re.IGNORECASE
+    )
+    if od_wall_len_m:
+        od, wt, l = od_wall_len_m.groups()
+        return f'{od}X{wt}X{l}'
+
+    # GEWA ENHANCED-FINNED TUBES: OD × 총길이 추출 (O54 재질코드 제외, LENGTH만 사용)
+    # 예: GEWA-PB 3/4" MATERIAL:O54 ... L7400MM → 3/4INX7400
+    if re.search(r'\bGEWA\b', text, re.IGNORECASE):
+        gewa_od = re.search(r'(\d+/\d+)\s*"', text, re.IGNORECASE)
+        gewa_len = re.search(r'(?<!\w)L\s*([\d.]+)\s*MM\b', text, re.IGNORECASE)
+        if gewa_od and gewa_len:
+            return f'{gewa_od.group(1)}INX{gewa_len.group(1)}'
+
+    # PLATE SIZE 다중 길이 목록 → min~max 범위: SIZE:7200MM,7700MM,...,5200MM → 5200~7700
+    if re.search(r'\bPLATE\b', text, re.IGNORECASE):
+        multi_len_m = re.search(
+            r'SIZE\s*:\s*([\d.]+MM(?:\s*,\s*[\d.]+MM){3,})',
+            text, re.IGNORECASE
+        )
+        if multi_len_m:
+            vals = [int(float(v)) for v in re.findall(r'([\d.]+)MM', multi_len_m.group(1))]
+            if len(vals) >= 4:
+                return f'{min(vals)}~{max(vals)}'
+
+    # CHANNEL 4-dim 치수: CHANNEL,{a}X{b}X{c}X{d}" → actual profile dimensions
+    # 예: A36, CHANNEL,3X1.596X.356X240" → 3X1.596X0.356X240IN
+    if re.search(r'\bCHANNEL\b', text, re.IGNORECASE):
+        ch_m = re.search(
+            r'\bCHANNEL\s*,?\s*([\d.]+[Xx][\d.]+[Xx][\d.]+[Xx][\d.]+)"',
+            text, re.IGNORECASE
+        )
+        if ch_m:
+            return ch_m.group(1).upper() + 'IN'
+
     # SLITTING WIDTH: 슬리팅 폭이 실제 구매 치수 (SIZE 외형치수보다 우선)
     # 예: SLITTING WIDTH 170MMSIZE:740X690X770MM → 170
     sw_m = re.search(r'\bSLITTING\s+W(?:IDTH)?\s*([\d.]+)\s*MM\b', text, re.IGNORECASE)
@@ -1683,11 +1765,19 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
     if rect_m:
         return rect_m.group(1).upper()
 
-    # CANNULA BLANK / BIOPSY CANNULA: NN GA [TW/RW] X N.NNN["?] → 길이만 추출 (게이지 무시)
-    if re.search(r'CANNULA\b', text, re.IGNORECASE):
+    # CANNULA BLANK / BIOPSY CANNULA / NEEDLE BLANK: NN GA [TW/RW] X N.NNN["?] → 길이만 추출 (게이지 무시)
+    if re.search(r'CANNULA\b|NEEDLE\s+BLANK\b', text, re.IGNORECASE):
         ca_m = re.search(r'\d+\s*GA\.?\s*\w*\s*[Xx]\s*([\d.]+)"?', text, re.IGNORECASE)
         if ca_m:
             return f'{ca_m.group(1)}IN'
+
+    # THERMACLAD / CP{4+} 솔더 와이어: 분수 직경만 추출 → {frac}IN
+    # 예: THERMACLAD 457 1/8 75# → 1/8IN,  7/64 CP2000 500# → 7/64IN
+    # (normalize가 THERMACLAD를 제거하므로 원본 spec_text 사용)
+    if re.search(r'\bTHERMACLAD\b|\bCP\d{4,}\b', spec_text, re.IGNORECASE):
+        frac_m = re.search(r'\b(\d+/\d+)\b', spec_text, re.IGNORECASE)
+        if frac_m:
+            return f'{frac_m.group(1)}IN'
 
     # BIOPSY STYLET: N.NNNN DIA. X N.NNN" or 4자리코드DIA X N.NNN → 직경X길이 (부품번호 제외)
     # 예: 0395DIA X 7.313 → 0.0395IN × 7.313IN (4자리 정수 = 0.XXXX인치)
