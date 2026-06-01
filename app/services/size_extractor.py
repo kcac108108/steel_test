@@ -1351,6 +1351,20 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
         except ValueError:
             return v
 
+    # 명시적 DIA: 치수 우선 — 소재번호/규격번호 노이즈보다 우선
+    # 예: ...NICROFER 4722...2.4665...B435-22... DIA:3X914X3048MM → 3X914X3048
+    dia_explicit_m = re.search(
+        r'\bDIA\s*:\s*([\d.]+(?:\s*[Xx]\s*[\d.]+){1,3})\s*MM\b', text, re.IGNORECASE)
+    if dia_explicit_m:
+        dims = re.split(r'\s*[Xx]\s*', dia_explicit_m.group(1))
+        return 'X'.join(_fmt_int_if_whole(d) for d in dims)
+
+    # PIPE 유럽식 OD-ID-WT (콤마 소수, 전체 일치): PIPE 105-26,65-2MM → 2X105 (WT×OD, ID 제거)
+    pipe_eu_m = re.match(
+        r'^PIPE\s+(\d+)-\d+(?:\.\d+)?-(\d+)\s*MM\s*$', text.strip(), re.IGNORECASE)
+    if pipe_eu_m:
+        return f'{pipe_eu_m.group(2)}X{pipe_eu_m.group(1)}'
+
     coil_twx0_m = re.search(
         r'(?:\bSIZE\s*:\s*)?([\d.]+)[Xx]([\d.]+)[Xx]0\.0{2,}\d*(?=[,/\s]|$)',
         text, re.IGNORECASE
