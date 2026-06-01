@@ -362,6 +362,27 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\b\d+(?:\.\d+)?[A-Z]{1,3}(?:/\d+(?:\.\d+)?[A-Z]{1,3}){2,}\b', '', s, flags=re.IGNORECASE)
     # LFC{n} 솔더 플럭스 브랜드코드 제거: LFC2 → ''
     s = re.sub(r'\bLFC\d+\b', '', s, flags=re.IGNORECASE)
+    # C{n}-{n}PKG SAFE-T-CABLE 카탈로그 코드 제거: C10-218PKG → '' (와이어 로프 클립 제품코드)
+    s = re.sub(r'\bC\d+-\d+PKG\b', '', s, flags=re.IGNORECASE)
+    # {n} PACKS OF {n} 수량 표기 제거: 3 PACKS OF 50 → '' (치수 아님)
+    s = re.sub(r'\b\d+\s+PACKS?\s+OF\s+\d+\b', '', s, flags=re.IGNORECASE)
+    # S{n}T/{n}/{n}/ 와이어 시리즈 코드 제거: S59T/030/000/ → '' (SAFE-T-CABLE 형식)
+    s = re.sub(r'\bS\d+T(?:/\d+)+/', '', s, flags=re.IGNORECASE)
+    # A-{n}TI 티타늄 합금 코드 제거: A-59TI → '' (Active Wire 합금 코드)
+    s = re.sub(r'\bA-\d+TI\b', '', s, flags=re.IGNORECASE)
+    # VZ{n} 합금 코드 제거: VZ2120 → '' (Vitrobraze 합금 번호)
+    s = re.sub(r'\bVZ\d+\b', '', s, flags=re.IGNORECASE)
+    # S{n}H{n}H 부품번호 제거: S60023H2010H → '' (Vitrobraze 브레이징 포일 부품코드)
+    s = re.sub(r'\bS\d+H\d+H\b', '', s, flags=re.IGNORECASE)
+    # {n}(U) 수량단위 괄호 제거: 4(U) → '' (unit 수량 표기)
+    s = re.sub(r'\b\d+\(U\)', '', s, flags=re.IGNORECASE)
+    # VITROBRAZE {n} 브랜드+모델 제거: VITROBRAZE 2120 → '' (브레이징 합금 브랜드)
+    s = re.sub(r'\bVITROBRAZE\s*\d*\b', '', s, flags=re.IGNORECASE)
+    # MUSTER: {int} {digit} X{n} → MUSTER:0.{int}{digit}X{n} (OCR 공백 포함 소수점 치수)
+    # 예: MUSTER: 0 1 X152 → 0.1X152
+    s = re.sub(r'\bMUSTER\s*:?\s*(\d+)\s+(\d)(?=\s*[Xx])', r'\1.\2', s, flags=re.IGNORECASE)
+    # 선두 수량/{치수} 분리: 3 / 0.1 X152 → 0.1 X152 (수량/치수 형식에서 수량 제거)
+    s = re.sub(r'^\s*\d+\s*/\s*(?=[\d.])', '', s.strip())
     # MATERIAL:O{n} 관재 재질코드 제거: MATERIAL:O54, MATERIAL:O61 → MATERIAL: (DIN/EN 관 소재등급)
     s = re.sub(r'(?<=MATERIAL:)O\d{2,3}\b', '', s, flags=re.IGNORECASE)
     # KP{8+자리} 구매처 부품번호 제거: KP989690048936 → '' (Kaman 구매처 추적번호)
@@ -1711,6 +1732,22 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
                 od = h
             return f'{od}INX{wall}INX{l_val}'
 
+    # SEAMLESS PIPE OD*ID*WT*L: 내경(ID) 제거, OD×WT×L 추출
+    # 예: 68.0*48.4*9.8MM 25MM → 68.0X9.8X25 (OD=68.0, ID=48.4 제거, WT=9.8, L=25)
+    if re.search(r'\bSEAMLESS\b', text, re.IGNORECASE):
+        pipe_oidwt_m = re.search(
+            r'([\d.]+)\s*\*\s*([\d.]+)\s*\*\s*([\d.]+)\s*MM\b\s+([\d.]+)\s*MM\b',
+            text, re.IGNORECASE
+        )
+        if pipe_oidwt_m:
+            od, mid_val, wt, length = pipe_oidwt_m.groups()
+            # 검증: OD > ID > WT (중간값이 ID인지 확인)
+            try:
+                if float(od) > float(mid_val) > float(wt):
+                    return f'{od}X{wt}X{length}'
+            except ValueError:
+                pass
+
     # CUT TO {n}IN: 절단 최종 길이 추출 → 39.53IN CUT TO pattern
     # 예: ... CUT TO 39.53IN(+,1250/-.0000IN) → 39.53IN
     cut_to_m = re.search(r'\bCUT\s+TO\s+([\d.]+)\s*IN\b', text, re.IGNORECASE)
@@ -2378,10 +2415,12 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
 
     # {n} DIA (단독 직경, 단위 없음): 20 DIA IN EXTERNAL DIAMETER → 20
     # (?<![/\d]): 분수 분모 오인식 방지 (3/64 DIA에서 64 대신 3을 잡는 것 방지)
-    if re.search(r'\bDIA\b', text, re.IGNORECASE) and not re.search(r'DIA\s*[\d.]', text, re.IGNORECASE):
-        n_dia_m = re.search(r'(?<![/\d])(\d+\.?\d*)\s+DIA\b', text, re.IGNORECASE)
+    if re.search(r'\bDIA\b', text, re.IGNORECASE) and not re.search(r'DIA\s*\d', text, re.IGNORECASE):
+        n_dia_m = re.search(r'(?<![/\d])(\d+\.?\d*)("?)\s+DIA\b', text, re.IGNORECASE)
         if n_dia_m:
-            val = n_dia_m.group(1)
+            val, inch_mark = n_dia_m.group(1), n_dia_m.group(2)
+            if inch_mark:
+                return f'{val}IN'  # 인치 직경: 0.030" DIA → 0.030IN (trailing zero 보존)
             try:
                 return f'{float(val):g}'
             except ValueError:
