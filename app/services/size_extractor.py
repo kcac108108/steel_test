@@ -531,8 +531,13 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\b(?:AVG|A)?WT\s+([\d.]+)\s*-\s*([\d.]+)L\b', r'WT \1 X \2', s, flags=re.IGNORECASE)
     # SIZE:{n}(A|KG) 단위중량 표기 제거: SIZE:37ALENGTH → SIZE:LENGTH (단위중량은 치수 아님)
     s = re.sub(r'(?<=SIZE:)\d+(?:A|KG)(?=[A-Z])', '', s, flags=re.IGNORECASE)
-    # BATCH NO: 로트번호 제거: BATCH NO:M1SW231037 → ''
-    s = re.sub(r'\bBATCH\s*NO\.?\s*:?\s*\S+', '', s, flags=re.IGNORECASE)
+    # BATCH NO/BATCH: 로트번호 제거: BATCH NO:M1SW231037, BATCH:251000136/5 → ''
+    s = re.sub(r'\bBATCH\s*(?:NO\.?\s*)?:?\s*[\w/.-]+', '', s, flags=re.IGNORECASE)
+    # NUMBER OF BARS:{n} 수량 제거: NUMBER OF BARS:47 → ''
+    s = re.sub(r'\bNUMBER\s+OF\s+BARS?\s*:\s*\d+', '', s, flags=re.IGNORECASE)
+    # {n}D 표면처리 코드 제거: 2D VIM → '' (냉연 표면처리 등급, 치수 아님)
+    # \s 옵션 제외: 연속공백(7M  PS)에서 오인식 방지
+    s = re.sub(r'\b\d[A-Z]\b(?=\s+(?:VIM|ESR|ANNEALED|COLD|ROLLED|PICKLED|DESCALED|$))', '', s, flags=re.IGNORECASE)
     # HEAT NO. 열번호 제거: HEAT NO.338645, CUT HEAT NO.338645 → '' (word boundary 없이 처리)
     s = re.sub(r'HEAT\s+NO\.?\s*[\w/.-]+', '', s, flags=re.IGNORECASE)
     # {fraction}CUT 절단 지정 제거: 1/2CUT, 1/2CUTHEAT → '' (뒤 word boundary 없이 처리)
@@ -1708,12 +1713,19 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
 
     # {frac}" OD + {n}" WALL + {n}FT LENGTH 순서 보존: 1/2" OD, 0.049" WALL, 1FT → 1/2INX0.049INX1FT
     od_wall_ft_m = re.search(
-        r'([\d/]+)\s*"\s+OD[,\s]+([\d./]+)\s*"\s+WALL[^,\n]*[,\s]+([\d.]+)\s*FT\s+L(?:ENGTH)?\b',
+        r'([\d/]+)\s*"\s+OD[,\s]+([\d./]+)\s*"\s+WALL[^,\n]*[,\s]+([\d.]+)\s*(?:FT|FOOT)\s+L(?:ENGTH|ONG)?\b',
         text, re.IGNORECASE
     )
     if od_wall_ft_m:
         od, wt, l = od_wall_ft_m.groups()
         return f'{od}INX{wt}INX{l}FT'
+
+    # SIZE: D {n}CMX L{n}CM: 직경(cm) × 길이(cm) → mm 변환: D 1CMX L63CM → 10X630
+    d_cm_m = re.search(r'\bD\s*([\d.]+)\s*CMX?\s*L\s*([\d.]+)\s*CM\b', text, re.IGNORECASE)
+    if d_cm_m:
+        od_val = round(float(d_cm_m.group(1)) * 10)
+        l_val = round(float(d_cm_m.group(2)) * 10)
+        return f'{od_val}X{l_val}'
 
     # {n}MM OD + {n}MM WALL + {n}MM LENGTH 순서 보존: 6MM OD, 0.25MM WALL, 500MM → 6X0.25X500
     od_wall_len_m = re.search(
@@ -1763,11 +1775,14 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
     # 예: PRODUCT DIMENSIONS NB 1.5 IN, SCH 40, CUT TO LENGTH 236.23 IN → 1.5INXSCH40X236.23IN
     if re.search(r'PRODUCT\s+DIMENSIONS?\b', text, re.IGNORECASE):
         pd_nb_m = re.search(
-            r'PRODUCT\s+DIMENSIONS?\s+NB\s+([\d./]+)\s+IN[,\s]+SCH\s+(\d+)[,\s]+CUT\s+TO\s+L(?:ENGTH\s+)?([\d.]+)\s+IN',
+            r'PRODUCT\s+DIMENSIONS?\s+NB\s+([\d./]+)\s+IN[,\s]+SCH\s+(\d+)'
+            r'(?:[,\s]+CUT\s+TO\s+L(?:ENGTH\s+)?([\d.]+)\s+IN'
+            r'|[\s,]*[Xx]\s+([\d.]+)\s+IN\s+CUT\s+TO\s+L(?:ENGTH)?)',
             text, re.IGNORECASE
         )
         if pd_nb_m:
-            nb, sch, l = pd_nb_m.groups()
+            nb, sch, l1, l2 = pd_nb_m.groups()
+            l = l1 or l2
             return f'{nb}INXSCH{sch}X{l}IN'
 
     # KINDORF CHANNEL {n}GA X {d1} X {d2} X {l}FT: GA 게이지 제외, 프로파일 치수만 추출
