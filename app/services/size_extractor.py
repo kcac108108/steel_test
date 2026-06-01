@@ -364,6 +364,12 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\bLFC\d+\b', '', s, flags=re.IGNORECASE)
     # TS{n}TUBING 카탈로그 코드 제거: TS110TUBING → '' (튜빙 카탈로그 코드)
     s = re.sub(r'\bTS\d+TUBING\b', '', s, flags=re.IGNORECASE)
+    # {n}RD{8+} UB ROUND 제품코드 제거: 250RD08000000 → '' (UB 제품코드: 사이즈+RD+직경+0패딩)
+    s = re.sub(r'\b\d{3}RD\d{8,}\b', '', s, flags=re.IGNORECASE)
+    # S{n}K{n}{alpha}{n} McMaster 와이어 카탈로그 코드 제거: S10K016RSF00 → ''
+    s = re.sub(r'\bS\d{1,3}K\d{3}[A-Z]{2,5}\d{2}\b', '', s, flags=re.IGNORECASE)
+    # RW-SP-{n} 릴 규격 코드 제거: RW-SP-72 → ''
+    s = re.sub(r'\bRW-SP-\d+\b', '', s, flags=re.IGNORECASE)
     # C{n}-{n}PKG SAFE-T-CABLE 카탈로그 코드 제거: C10-218PKG → '' (와이어 로프 클립 제품코드)
     s = re.sub(r'\bC\d+-\d+PKG\b', '', s, flags=re.IGNORECASE)
     # {n} PACKS OF {n} 수량 표기 제거: 3 PACKS OF 50 → '' (치수 아님)
@@ -1743,6 +1749,24 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
         tubing_od_m = re.search(r'([\d/]+(?:\.\d+)?)\s*"?\s+OD\b', text, re.IGNORECASE)
         if tubing_od_m:
             return f'{tubing_od_m.group(1)}IN'
+
+    # UB/ROUND BAR: ROUND {n} → 단면 직경 (단위중량 무시)
+    # 예: UB 250 ROUND 80 02.26 → 80
+    if re.search(r'\bROUND\b', text, re.IGNORECASE) and re.search(r'\bUB\b', text, re.IGNORECASE):
+        rnd_m = re.search(r'\bROUND\s+([\d.]+)\b', text, re.IGNORECASE)
+        if rnd_m:
+            val = rnd_m.group(1)
+            try: return f'{float(val):g}'
+            except: return val
+
+    # SUPRAMIG 용접 와이어: 직경만 추출 ({dia}X{spool_type} 형식에서 직경만)
+    # 예: SUPRAMIG HD 1.0X16 B300 → 1
+    if re.search(r'\bSUPRAMIG\b', spec_text, re.IGNORECASE):
+        sup_m = re.search(r'\b([\d.]+)\s*[Xx]\d{2}\b', spec_text, re.IGNORECASE)
+        if sup_m:
+            val = sup_m.group(1)
+            try: return f'{float(val):g}'
+            except: return val
 
     # SOLDER-WIRE D{n} 직경 추출: WAVE SOLDER-WIRE,D3.0, → 3 (콤마로 구분된 D+숫자)
     if re.search(r'\bSOLDER\b', text, re.IGNORECASE):
