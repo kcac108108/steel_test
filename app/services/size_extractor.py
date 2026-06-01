@@ -168,6 +168,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'^\d+\)\s*', '', s)
     # 8자리 이상 카탈로그/부품번호 제거 (선두 위치만): 62590271 0023,OIL PIPE → 0023,OIL PIPE
     s = re.sub(r'^\d{8,}\s*', '', s.strip())
+    # 0{n}-0{n} 선두 로트범위 코드 제거: 0202-001696 → '' (선두 0 포함 로트번호 범위)
+    s = re.sub(r'^0\d{2,3}-0\d{4,6}\b\s*', '', s.strip())
     # WIRE{n} 시리즈 번호 제거: WIRE1 ER308 → WIRE ER308 (단독 숫자만, 2자리 이상 유지)
     # 단, 소수점 뒤에 오는 경우 제외: WIRE2.0MM (실제 치수) → 그대로 유지
     s = re.sub(r'\bWIRE(\d)\b(?!\.\d)', 'WIRE', s, flags=re.IGNORECASE)
@@ -356,6 +358,10 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\b1\.\d{4}/\d{1,4}\b', '', s, flags=re.IGNORECASE)
     # KT{n} 제품 코드 제거: KT4, KT12 → '' (치수 아닌 제품 카테고리 코드)
     s = re.sub(r'\bKT\d{1,2}\b', '', s, flags=re.IGNORECASE)
+    # 솔더 합금 조성 체인 제거: 99.79SN/0.2CU/0.01PB → '' (합금 성분비, 치수 아님)
+    s = re.sub(r'\b\d+(?:\.\d+)?[A-Z]{1,3}(?:/\d+(?:\.\d+)?[A-Z]{1,3}){2,}\b', '', s, flags=re.IGNORECASE)
+    # LFC{n} 솔더 플럭스 브랜드코드 제거: LFC2 → ''
+    s = re.sub(r'\bLFC\d+\b', '', s, flags=re.IGNORECASE)
     # MATERIAL:O{n} 관재 재질코드 제거: MATERIAL:O54, MATERIAL:O61 → MATERIAL: (DIN/EN 관 소재등급)
     s = re.sub(r'(?<=MATERIAL:)O\d{2,3}\b', '', s, flags=re.IGNORECASE)
     # KP{8+자리} 구매처 부품번호 제거: KP989690048936 → '' (Kaman 구매처 추적번호)
@@ -368,6 +374,10 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\b0+\d{2,4}-\d{4,6}[A-Z]{1,4}\b', '', s, flags=re.IGNORECASE)
     # NI{n}/CR{n}/FE{n}... 연속 합금조성 체인 제거: NI80/CR20, NI74/CR15/FE 7/TI/AL/NB → ''
     s = re.sub(r'\bNI\d{1,3}(?:\s*/\s*[A-Z]{1,3}\d*)+', '', s, flags=re.IGNORECASE)
+    # {n}/TI/AL/NB 등 숫자 뒤 원소 체인 잔류 제거: 7/TI/AL/NB → '' (NI... 제거 후 남는 잔류)
+    s = re.sub(r'\b\d+(?:/[A-Z]{1,3}){2,}\b', '', s, flags=re.IGNORECASE)
+    # ;-{n}WIRE 솔더 와이어 시리즈 코드 제거: ;-3.0WIRE → '' (세미콜론 뒤 시리즈 변형코드)
+    s = re.sub(r';-[\d.]+WIRE\b', '', s, flags=re.IGNORECASE)
     # 분수형 화학 성분 표기 제거: 1/2MO, 1/4CR → '' (성분비가 분수 형태, 정수형보다 먼저 처리)
     s = re.sub(r'\b\d+/\d+(?:MO|NI|CR|MN|CU|AL|CO)\b', '', s, flags=re.IGNORECASE)
     # 화학 조성 퍼센트 표기 제거: 1NI, 2CR, 0.5V 등 (합금 성분비, 치수 아님)
@@ -1700,6 +1710,12 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
             except ValueError:
                 od = h
             return f'{od}INX{wall}INX{l_val}'
+
+    # CUT TO {n}IN: 절단 최종 길이 추출 → 39.53IN CUT TO pattern
+    # 예: ... CUT TO 39.53IN(+,1250/-.0000IN) → 39.53IN
+    cut_to_m = re.search(r'\bCUT\s+TO\s+([\d.]+)\s*IN\b', text, re.IGNORECASE)
+    if cut_to_m:
+        return f'{cut_to_m.group(1)}IN'
 
     # SCH 파이프 괄호 실치수: 50AX SCH80X 6000MM (60.50MM*5.5MM) → 60.50X5.5X6000
     # 공칭치수(NPS+SCH) 옆 괄호에 실OD×WT가 있을 때 우선 사용
