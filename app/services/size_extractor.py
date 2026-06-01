@@ -362,6 +362,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\b\d+(?:\.\d+)?[A-Z]{1,3}(?:/\d+(?:\.\d+)?[A-Z]{1,3}){2,}\b', '', s, flags=re.IGNORECASE)
     # LFC{n} 솔더 플럭스 브랜드코드 제거: LFC2 → ''
     s = re.sub(r'\bLFC\d+\b', '', s, flags=re.IGNORECASE)
+    # TS{n}TUBING 카탈로그 코드 제거: TS110TUBING → '' (튜빙 카탈로그 코드)
+    s = re.sub(r'\bTS\d+TUBING\b', '', s, flags=re.IGNORECASE)
     # C{n}-{n}PKG SAFE-T-CABLE 카탈로그 코드 제거: C10-218PKG → '' (와이어 로프 클립 제품코드)
     s = re.sub(r'\bC\d+-\d+PKG\b', '', s, flags=re.IGNORECASE)
     # {n} PACKS OF {n} 수량 표기 제거: 3 PACKS OF 50 → '' (치수 아님)
@@ -381,8 +383,8 @@ def _normalize(s: str) -> str:
     # MUSTER: {int} {digit} X{n} → MUSTER:0.{int}{digit}X{n} (OCR 공백 포함 소수점 치수)
     # 예: MUSTER: 0 1 X152 → 0.1X152
     s = re.sub(r'\bMUSTER\s*:?\s*(\d+)\s+(\d)(?=\s*[Xx])', r'\1.\2', s, flags=re.IGNORECASE)
-    # 선두 수량/{치수} 분리: 3 / 0.1 X152 → 0.1 X152 (수량/치수 형식에서 수량 제거)
-    s = re.sub(r'^\s*\d+\s*/\s*(?=[\d.])', '', s.strip())
+    # 선두 수량 / {치수} 분리: 3 / 0.1 X152 → 0.1 X152 (공백+슬래시인 경우만, 분수 1/16 보호)
+    s = re.sub(r'^\s*\d+\s+/\s*(?=[\d.])', '', s.strip())
     # MATERIAL:O{n} 관재 재질코드 제거: MATERIAL:O54, MATERIAL:O61 → MATERIAL: (DIN/EN 관 소재등급)
     s = re.sub(r'(?<=MATERIAL:)O\d{2,3}\b', '', s, flags=re.IGNORECASE)
     # KP{8+자리} 구매처 부품번호 제거: KP989690048936 → '' (Kaman 구매처 추적번호)
@@ -1731,6 +1733,23 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
             except ValueError:
                 od = h
             return f'{od}INX{wall}INX{l_val}'
+
+    # TUBING {frac}" OD with ID present: OD만 추출 (1/16 OD, 0.010" ID → 1/16IN)
+    # normalize가 TS110TUBING을 제거하므로 원본 spec_text 사용
+    if re.search(r'TUBING\b', spec_text, re.IGNORECASE) and re.search(r'\bOD\b.*\bID\b', text, re.IGNORECASE):
+        tubing_od_m = re.search(r'([\d/]+(?:\.\d+)?)\s*"?\s+OD\b', text, re.IGNORECASE)
+        if tubing_od_m:
+            return f'{tubing_od_m.group(1)}IN'
+
+    # SOLDER-WIRE D{n} 직경 추출: WAVE SOLDER-WIRE,D3.0, → 3 (콤마로 구분된 D+숫자)
+    if re.search(r'\bSOLDER\b', text, re.IGNORECASE):
+        sol_m = re.search(r',D([\d.]+),', text, re.IGNORECASE)
+        if sol_m:
+            val = sol_m.group(1)
+            try:
+                return f'{float(val):g}'
+            except ValueError:
+                return val
 
     # SEAMLESS PIPE OD*ID*WT*L: 내경(ID) 제거, OD×WT×L 추출
     # 예: 68.0*48.4*9.8MM 25MM → 68.0X9.8X25 (OD=68.0, ID=48.4 제거, WT=9.8, L=25)
