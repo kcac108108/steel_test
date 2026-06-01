@@ -719,6 +719,8 @@ def _strip_grade_codes(text: str) -> str:
     text = re.sub(r'\bSCH(\d+)\b', r'SCH__\1', text)
     # OD{n} 외경 접두사 임시 보호: OD406 → OD__406 (강종코드 오인 삭제 방지)
     text = re.sub(r'\bOD(\d)', r'OD__\1', text)
+    # D{n} 직경 접두사 임시 보호: D100 → D__100 (직경 레이블이 강종코드로 오인 삭제 방지)
+    text = re.sub(r'(?<![A-Z])D(\d)', r'D__\1', text)
     # DIA{n} 직경 접두사 임시 보호: DIA105 → DIA__105 (강종코드 오인 삭제 방지)
     text = re.sub(r'\bDIA(\d)', r'DIA__\1', text)
     # GR./GR 등급 표시 제거: GR.1, GR.2, GR 1 등
@@ -792,6 +794,7 @@ def _strip_grade_codes(text: str) -> str:
     result = result.replace('X_', 'X')
     result = result.replace('SCH__', 'SCH')
     result = result.replace('OD__', 'OD')
+    result = result.replace('D__', 'D')
     return result.replace('DIA__', 'DIA')
 
 
