@@ -100,6 +100,8 @@ def _normalize(s: str) -> str:
     s = s.replace('Ø', 'DIA').replace('⌀', 'DIA').replace('Φ', 'DIA').replace('φ', 'DIA')
     # × (Unicode 곱셈 기호 U+00D7) → X (치수 구분자 통일)
     s = s.replace('×', 'X')
+    # ㎜ (Unicode 밀리미터 U+339C) → MM (단위 통일)
+    s = s.replace('㎜', 'MM')
     # W/L 레이블 뒤 천단위 쉼표 제거 (European decimal 변환 전에 먼저 처리)
     # W 1,255MM → W 1255MM, L 4,620MM → L 4620MM (폭/길이는 천단위 구분자)
     s = re.sub(r'\b(W|L)\s+(\d{1,4}),(\d{3})(MM|CM|IN|FT)\b', r'\1 \2\3\4', s, flags=re.IGNORECASE)
@@ -181,6 +183,16 @@ def _normalize(s: str) -> str:
     s = re.sub(r'(MM|IN|FT|CM)([A-Z]{2,5}\d{3,})', r'\1 \2', s, flags=re.IGNORECASE)
     # 단위 직후 ABOUT 분리: 2.30MMABOUT → 2.30MM ABOUT
     s = re.sub(r'(MM|IN|FT|CM)(ABOUT)\b', r'\1 \2', s, flags=re.IGNORECASE)
+    # SEAMLESS{grade} 연결된 스텐인리스 등급 분리: SEAMLESS316 → SEAMLESS (316은 그레이드)
+    s = re.sub(r'\bSEAMLESS(\d{3}[A-Z]?\b)', r'SEAMLESS ', s, flags=re.IGNORECASE)
+    # S{0.0xx} 두께 공차 접두코드 완전 제거: S0.050, S0.080 → '' (tolerance prefix, 치수 아님)
+    s = re.sub(r'(?<!\w)S(0\.\d+)\b', '', s, flags=re.IGNORECASE)
+    # {a.bc}/{d.ef} X {w} X {l} 공차범위: 두번째 값이 실 사양 → 0.48/0.052 X 36 X 120 → 0.052 X 36 X 120
+    s = re.sub(r'(?<!\w)(\d+\.\d+)/(\d+\.\d+)(\s*[Xx]\s*[\d.]+\s*[Xx]\s*[\d.]+)', r'\2\3', s)
+    # IN EXTERNAL DIAMETER 구문 제거: "20 MM in external diameter" → "20 MM" (전치사 IN이 INCH로 오인식 방지)
+    s = re.sub(r'\bIN\s+EXTERNAL\s+DIAMETER\b', '', s, flags=re.IGNORECASE)
+    # FM{n} 마감코드 제거: FM 3, FM3 → '' (COLD ROLLED 마감, 소수점 앞은 치수이므로 제외)
+    s = re.sub(r'\bFM\s*\d{1,2}(?!\.\d)\b', '', s, flags=re.IGNORECASE)
     # SC H\d → SCH\d (타이핑 오류로 공백 삽입된 SCH 복원: SC H40 → SCH40)
     s = re.sub(r'\bSC\s+H(\d)', r'SCH\1', s, flags=re.IGNORECASE)
     # 복합분수 인치 표기: 1 5/8" → 1-5/8IN, 1 1/4" → 1-1/4IN (정수+분수 복합 인치)
@@ -217,7 +229,8 @@ def _normalize(s: str) -> str:
     # INNER DIAMETER/DIA 제거: 외경+내경 동시 표기 시 내경은 치수 불필요 (외경+두께가 정답)
     s = re.sub(r'\bINNER\s+(?:DIAMETER|DIA)\s*:?\s*[\d.]+\s*MM\b', '', s, flags=re.IGNORECASE)
     # OD 맥락에서 ID/CHD(내경)/R(반경)/H(공차등급) 제거: OD14 ID4.2, CHD:4.20MM, R13.000MM, H8
-    if re.search(r'\bOD\b', s, re.IGNORECASE):
+    # OD13.3처럼 OD 직후 숫자가 붙어도 인식 (word boundary 없이)
+    if re.search(r'\bOD(?:\b|(?=[\d.]))', s, re.IGNORECASE):
         s = re.sub(r'\b(?:ID|CHD)\s*:?\s*[\d.]+\s*(?:MM|CM|IN(?:CH)?)?\b', '', s, flags=re.IGNORECASE)
         s = re.sub(r'\bR\s*[\d,]+(?:\.\d+)?\s*(?:MM|CM|IN)?\b', '', s, flags=re.IGNORECASE)  # R13,000/R13.000MM 반경
         s = re.sub(r'\bH\d{1,2}\b', '', s, flags=re.IGNORECASE)                              # H8 공차등급
@@ -327,8 +340,8 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\b[A-WY-Z]\d{3,4}[A-WY-Z]\d{2,3}\b', '', s, flags=re.IGNORECASE)
     # AMS 재료 규격코드 제거: AMS 5643, AMS5670H/5671H → '' (미군 재료규격, 치수 아님)
     s = re.sub(r'\bAMS\s*\d{4,5}[A-Z]?(?:/\d{4,5}[A-Z]?)?\b', '', s, flags=re.IGNORECASE)
-    # UNS 합금 번호 제거: UNS N06625, UNS#N07718 → '' (합금 통합번호, 치수 아님)
-    s = re.sub(r'\bUNS#?\s*[A-Z]\d{5}\b', '', s, flags=re.IGNORECASE)
+    # UNS 합금 번호 제거: UNS N06625, UNS#N07718, UNS-N-07718 → '' (합금 통합번호, 치수 아님)
+    s = re.sub(r'\bUNS#?[-\s]*[A-Z]-?\d{5}\b', '', s, flags=re.IGNORECASE)
     # HIGHPERRM {n} 소재명 뒤 숫자 제거: HIGHPERRM 49 → '' (치수 아닌 합금계열 인덱스)
     s = re.sub(r'\bHIGHPERRM\s+\d+\b', '', s, flags=re.IGNORECASE)
     # EN 규격코드 제거: EN 10269, EN10060 → '' (유럽 강재규격, 5자리 숫자)
@@ -1692,6 +1705,15 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
     if sch_actual_m:
         l, d1, d2 = sch_actual_m.groups()
         return f'{d1}X{d2}X{l}'
+
+    # {frac}" OD + {n}" WALL + {n}FT LENGTH 순서 보존: 1/2" OD, 0.049" WALL, 1FT → 1/2INX0.049INX1FT
+    od_wall_ft_m = re.search(
+        r'([\d/]+)\s*"\s+OD[,\s]+([\d./]+)\s*"\s+WALL[^,\n]*[,\s]+([\d.]+)\s*FT\s+L(?:ENGTH)?\b',
+        text, re.IGNORECASE
+    )
+    if od_wall_ft_m:
+        od, wt, l = od_wall_ft_m.groups()
+        return f'{od}INX{wt}INX{l}FT'
 
     # {n}MM OD + {n}MM WALL + {n}MM LENGTH 순서 보존: 6MM OD, 0.25MM WALL, 500MM → 6X0.25X500
     od_wall_len_m = re.search(
