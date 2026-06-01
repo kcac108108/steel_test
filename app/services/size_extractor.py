@@ -185,6 +185,9 @@ def _normalize(s: str) -> str:
     s = re.sub(r'\b(\d)\s+(\d+/\d+)\s*"', r'\1-\2IN', s)
     # 파이프 공칭인치+스케줄: 6"*SCH40, 6" *STD, 12"*SCH20 → 6IN *SCH40 (SCH/STD/XS 앞의 " 보존)
     s = re.sub(r'(\d+(?:\.\d+)?)\s*"\s*(?=\*?\s*(?:SCH|STD|XS|XXS))', r'\1IN ', s, flags=re.IGNORECASE)
+    # PIPE/TUBE 맥락 인치 OD: 5"*8T*3000 → 5IN*8*3000 (파이프 인치OD × 두께 × 길이)
+    if re.search(r'\b(?:PIPE|TUBE)\b', s, re.IGNORECASE):
+        s = re.sub(r'(\d+(?:\.\d+)?)"(?=\s*\*)', r'\1IN', s)
     # 구조재 폭 표기: BOOM 133"*4.5 형태에서 " 뒤에 * 가 오면 치수 구분자 → IN 변환 안함
     s = re.sub(r'(\d+)"\s*(?=\*)', r'\1 ', s)
     # PIPE 맥락 두께+길이 연결 표기: 12.76000 → 12.7 6000 (소수 1자리 + 4자리 길이)
@@ -291,6 +294,10 @@ def _normalize(s: str) -> str:
         lambda m: str(round(float(m.group(1)) * 1000)) + 'MM',
         s, flags=re.IGNORECASE
     )
+    # (P{n}) 스풀크기 코드 제거: (P3.5) → '' (와이어/용접봉 스풀 크기, 치수 아님)
+    s = re.sub(r'\(\s*P[\d.]+\s*\)', '', s, flags=re.IGNORECASE)
+    # ({n}G) 소포장 중량 괄호 제거: (250G), (10G) → '' (그램 단위 소포장, 치수 아님)
+    s = re.sub(r'\(\s*\d+\s*G\s*\)', '', s, flags=re.IGNORECASE)
     # (MATERIAL {grade}) 괄호 내 재질/목적 정보 제거: (MATERIAL 304STAINLESS...) → ''
     s = re.sub(r'\(\s*MATERIAL\s*[^)]+\)', '', s, flags=re.IGNORECASE)
     s = re.sub(r'\(\s*PURPOSE[^)]+\)', '', s, flags=re.IGNORECASE)
@@ -413,6 +420,9 @@ def _normalize(s: str) -> str:
     s = re.sub(r'^[A-Z]{1,3}\d{1,3}[A-Z]\d{5,}[A-Z]?\b\s*', '', s.strip(), flags=re.IGNORECASE)
     # P252420SEAMLESS 같이 \b 없는 경우: 알파/공백/끝 앞 단독 [알파1][숫자6+] 선두코드 제거
     s = re.sub(r'^[A-Z]\d{6,}(?=[A-Z\s]|$)\s*', '', s.strip(), flags=re.IGNORECASE)
+    # B{2자리} 배치코드 prefix 제거: B30.15X15.50 → .15X15.50 (제품코드 A{9digit} 제거 후 남는 B{2digit} 접미사)
+    # 선두 코드 제거(line 422) 이후에 실행해야 \b가 정상 동작
+    s = re.sub(r'\bB\d{2}(?=\.\d)', '', s)
     # ST{n} 독일 구조강 등급코드 제거: ST52, ST35, ST37, ST52CF, ST52E → '' (DIN ST 계열)
     # (?<![A-Za-z]): 앞에 알파가 없을 때만 (8.5ST52CF → ST52CF 제거, STAINLESS는 제외)
     s = re.sub(r'(?<![A-Za-z])ST\d{2,3}(?:CF|E|N|H)?\b', '', s, flags=re.IGNORECASE)
@@ -449,6 +459,9 @@ def _normalize(s: str) -> str:
         s = re.sub(r'[Xx*]\s*\d{6,}\s*MM\b', '', s, flags=re.IGNORECASE)    # X1000000MM/*1000000MM 총길이 (100m+ 제거, 45m 피스 보존)
         if re.search(r'\bCABLE\b', s, re.IGNORECASE):
             s = re.sub(r'^\d{5,6}\b\s*', '', s.strip())                    # CABLE 선두 카탈로그번호
+    # 파이프/튜브 코일 총길이 제거: 12.7MMX0.89MMX140000MM → 12.7MMX0.89MM (6자리+ = 100m+)
+    # 앞에 MM 치수가 있을 때만 적용 (X로 이어지는 마지막 값이 6자리+)
+    s = re.sub(r'(?<=MM)[Xx]\d{6,}\s*MM\b', '', s, flags=re.IGNORECASE)
     # DRY 와이어 맥락: {quantity}X{length}M{construction} {diameter}MM DRY 형태에서 직경만 추출
     # 예: 6X1000M6X24+7PP 14MM DRY → 14MM
     if re.search(r'\bDRY\b', s, re.IGNORECASE):
@@ -1540,9 +1553,10 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
         w, l = t_range_wl_m.group(3), t_range_wl_m.group(4)
         return f'{t_max}INX{w}INX{l}IN'
 
-    # GA 게이지 ASTM SHEET: SIZE:NINxNIN + THICKNESS:N GA → N(게이지)XNINxNIN
-    if re.search(r'THICKNESS\s*:\s*\d+\s*GA', text, re.IGNORECASE):
-        ga_m = re.search(r'THICKNESS\s*:\s*(\d+)\s*GA', text, re.IGNORECASE)
+    # GA 게이지 ASTM SHEET: SIZE:{w}INCH X {l}INCH + THICKNESS:{n}GA → {n}X{w}INX{l}IN
+    # (normalize가 THICKNESS:N GA → TN GA로 변환하므로 T패턴도 처리)
+    if re.search(r'\bSHEET\b', text, re.IGNORECASE):
+        ga_m = re.search(r'(?:THICKNESS\s*:?\s*|(?<!\w)T)(\d+)\s*GA\b', text, re.IGNORECASE)
         size_inch_m = re.search(r'SIZE\s*:\s*([\d.]+)\s*INCH\s*[Xx]\s*([\d.]+)\s*INCH', text, re.IGNORECASE)
         if ga_m and size_inch_m:
             return f'{ga_m.group(1)}X{size_inch_m.group(1)}INX{size_inch_m.group(2)}IN'
@@ -1634,6 +1648,40 @@ def extract_size_regex(spec_text: str) -> Optional[str]:
             except ValueError:
                 od = h
             return f'{od}INX{wall}INX{l_val}'
+
+    # SLITTING WIDTH: 슬리팅 폭이 실제 구매 치수 (SIZE 외형치수보다 우선)
+    # 예: SLITTING WIDTH 170MMSIZE:740X690X770MM → 170
+    sw_m = re.search(r'\bSLITTING\s+W(?:IDTH)?\s*([\d.]+)\s*MM\b', text, re.IGNORECASE)
+    if sw_m:
+        return sw_m.group(1)
+
+    # PRODUCT DIMENSIONS NB+SCH: NB {n} IN, SCH {n}, CUT TO LENGTH {l} IN → {n}INXSCH{n}X{l}IN
+    # 예: PRODUCT DIMENSIONS NB 1.5 IN, SCH 40, CUT TO LENGTH 236.23 IN → 1.5INXSCH40X236.23IN
+    if re.search(r'PRODUCT\s+DIMENSIONS?\b', text, re.IGNORECASE):
+        pd_nb_m = re.search(
+            r'PRODUCT\s+DIMENSIONS?\s+NB\s+([\d./]+)\s+IN[,\s]+SCH\s+(\d+)[,\s]+CUT\s+TO\s+L(?:ENGTH\s+)?([\d.]+)\s+IN',
+            text, re.IGNORECASE
+        )
+        if pd_nb_m:
+            nb, sch, l = pd_nb_m.groups()
+            return f'{nb}INXSCH{sch}X{l}IN'
+
+    # KINDORF CHANNEL {n}GA X {d1} X {d2} X {l}FT: GA 게이지 제외, 프로파일 치수만 추출
+    # 예: KINDORF CHANNEL - 12 GA. X 1 5/8" X 1 5/8" X 3 FT → 1-5/8INX1-5/8INX3FT
+    if re.search(r'\bKINDORF\b', text, re.IGNORECASE):
+        kd_m = re.search(
+            r'\d+\s*GA\.?\s*[Xx]\s+([\d]+(?:-\d+/\d+)?IN)\s*[Xx]\s*([\d]+(?:-\d+/\d+)?IN)\s*[Xx]\s*([\d.]+\s*FT)',
+            text, re.IGNORECASE
+        )
+        if kd_m:
+            d1, d2, lft = kd_m.groups()
+            return f'{d1}X{d2}X{lft.replace(" ", "")}'
+
+    # RECTANGLE {w}X{h}: 직사각형 단면 빔/바 치수 추출 (단위중량 등 뒤 숫자 무시)
+    # 예: UB 500 PLUS RECTANGLE 145X75 28.02 → 145X75
+    rect_m = re.search(r'\bRECTANGLE\b\s+([\d.]+[Xx][\d.]+)', text, re.IGNORECASE)
+    if rect_m:
+        return rect_m.group(1).upper()
 
     # CANNULA BLANK / BIOPSY CANNULA: NN GA [TW/RW] X N.NNN["?] → 길이만 추출 (게이지 무시)
     if re.search(r'CANNULA\b', text, re.IGNORECASE):
