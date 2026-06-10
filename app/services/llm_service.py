@@ -6,14 +6,51 @@ LLM이 "판단 불가" 응답을 반환하면 미분류로 처리합니다.
 """
 
 import json
+import os
+import pickle
 import time
+from pathlib import Path
 from typing import Optional
 from openai import OpenAI, RateLimitError
 from app.core.config import settings
 from app.models.schemas import ClassifyResult, ClassifyMethod
 
 
-SYSTEM_PROMPT = """당신은 철강 수입신고 전문가입니다.
+_GRADE_LIST_CACHE = "grade_list.pkl"
+
+
+def _load_grade_list(top_n: int = 300) -> list[str]:
+    """확정 데이터에서 빈도 상위 강종 목록 로드 (pickle 캐시 사용)"""
+    if os.path.exists(_GRADE_LIST_CACHE):
+        with open(_GRADE_LIST_CACHE, "rb") as f:
+            return pickle.load(f)
+
+    import pandas as pd
+    from collections import Counter
+    counter: Counter = Counter()
+    confirmed_dir = Path("confirmed")
+    if confirmed_dir.exists():
+        for f in sorted(confirmed_dir.glob("**/*.xlsx")):
+            try:
+                df = pd.read_excel(f, dtype=str)
+                if "강종" in df.columns:
+                    valid = df["강종"].dropna().str.strip()
+                    valid = valid[(valid != "") & (valid != "0")]
+                    counter.update(valid.tolist())
+            except Exception:
+                pass
+
+    # 빈도 상위 top_n개만 추출
+    grade_list = sorted(g for g, _ in counter.most_common(top_n))
+    if grade_list:
+        with open(_GRADE_LIST_CACHE, "wb") as f:
+            pickle.dump(grade_list, f)
+        print(f"  [LLM] 강종 목록 구축 완료: {len(grade_list):,}개")
+    return grade_list
+
+
+def _build_system_prompt(grade_list: list[str]) -> str:
+    base = """당신은 철강 수입신고 전문가입니다.
 입력된 규격품명(영문 자유형식 텍스트)에서 강종(steel grade)과 사이즈(size)를 추출해야 합니다.
 
 규칙:
@@ -59,10 +96,23 @@ SYSTEM_PROMPT = """당신은 철강 수입신고 전문가입니다.
 - 텍스트에 "AH36", "GRADE AH36" 명시 → AH36
 - 텍스트에 "EH36", "GRADE EH36" 명시 → EH36
 - 텍스트에 "DH32", "GRADE DH32" 명시 → DH32
-- 위 키워드가 없고 선급강임이 의심되면 → 판단 불가 반환 (추측 금지)
+- 위 키워드가 없고 선급강임이 의심되면 → 판단 불가 반환 (추측 금지)"""
+
+    if grade_list:
+        grade_str = ", ".join(grade_list)
+        base += f"""
+
+[유효 강종 목록 - 형식 준수 필수]
+강종을 반환할 때는 반드시 아래 목록의 강종명과 동일한 형식(대소문자·공백·구분자 포함)을 사용하세요.
+목록에 없는 강종이라도 규격코드 우선 원칙에 따라 정확히 식별된 경우에는 반환 가능합니다.
+단, 확신이 없으면 null을 반환하세요.
+
+{grade_str}"""
+
+    base += """
 
 응답 형식 (분류 가능할 때):
-{"steel_grade": "AMS5659", "size": "0.3125\" DIA X 144\"", "confidence": 0.9}
+{"steel_grade": "AMS5659", "size": "0.3125\\" DIA X 144\\"", "confidence": 0.9}
 
 응답 형식 (판단 불가):
 {"steel_grade": null, "size": null, "confidence": 0.0}
@@ -70,23 +120,37 @@ SYSTEM_PROMPT = """당신은 철강 수입신고 전문가입니다.
 강종 예시: JIS G3101 SS400, JIS G3302 SGCC, JIS G4404 SKD11, AMS5659, AMS6415, ASTM A240 304/304L, ASME SA789 UNS S31803, SUS304, SCM440, LR A, AH32, EH36 등
 사이즈 예시: "2.0T X 1524W X C", "19.05 OD X 1.65T", "100 X 100 X 6.0" 등"""
 
+    return base
+
 
 class LLMService:
     def __init__(self):
         self._client = OpenAI(api_key=settings.openai_api_key)
+        grade_list = _load_grade_list()
+        self._system_prompt = _build_system_prompt(grade_list)
 
-    def classify(self, spec_text: str) -> Optional[ClassifyResult]:
+    def classify(self, spec_text: str, rag_hints: list[dict] | None = None) -> Optional[ClassifyResult]:
         """
         GPT로 강종/사이즈 분류 시도.
+        rag_hints: [{"grade": ..., "similarity": ...}, ...] — RAG 유사 후보 힌트
         신뢰도가 llm_confidence_threshold 미만이면 None 반환 (미분류).
         """
+        hint_text = ""
+        if rag_hints:
+            hint_text = "\n\n[RAG 유사 사례 힌트 - 참고용]\n"
+            for h in rag_hints[:3]:
+                hint_text += f"  유사도 {h['similarity']:.0%}: {h['grade']}\n"
+            hint_text += "* 원문 규격 기준으로 최종 판단하세요. 힌트와 다를 수 있습니다."
+
+        user_content = f"규격품명: {spec_text}{hint_text}"
+
         for attempt in range(3):
             try:
                 response = self._client.chat.completions.create(
                     model=settings.llm_model,
                     messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": f"규격품명: {spec_text}"},
+                        {"role": "system", "content": self._system_prompt},
+                        {"role": "user", "content": user_content},
                     ],
                     response_format={"type": "json_object"},
                 )
@@ -100,7 +164,6 @@ class LLMService:
 
                 if (
                     not steel_grade
-                    or not size
                     or confidence < settings.llm_confidence_threshold
                 ):
                     return None

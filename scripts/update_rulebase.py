@@ -7,7 +7,8 @@ Oracle rule_base 테이블을 갱신합니다.
 동작 방식:
   - 규격 텍스트에서 'MODEL: XXXXX' 패턴 추출
   - 동일 패턴의 강종 일관성 분석 (기본 95% 이상)
-  - 기존 rule_base에 있으면 UPDATE, 없으면 INSERT
+  - 신규 패턴 → INSERT
+  - 기존 패턴 + 강종 불일치 → 충돌 리포트 출력 (자동 수정 안 함, 담당자 검토)
 
 사용법:
   python scripts/update_rulebase.py
@@ -104,9 +105,40 @@ def analyze_consistency(df: pd.DataFrame, min_consistency: float) -> pd.DataFram
     return filtered
 
 
-def get_existing_patterns(cursor) -> set:
-    cursor.execute("SELECT UPPER(pattern) FROM rule_base")
-    return {row[0] for row in cursor.fetchall()}
+def get_existing_patterns(cursor) -> dict:
+    """기존 rule_base 패턴과 강종을 함께 반환 {pattern_upper: steel_grade}"""
+    cursor.execute("SELECT UPPER(pattern), steel_grade FROM rule_base")
+    return {row[0]: row[1] for row in cursor.fetchall()}
+
+
+def print_conflict_report(consistent_df: pd.DataFrame, existing: dict) -> None:
+    """기존 패턴과 강종이 다른 경우 충돌 리포트 출력"""
+    conflicts = []
+    for _, r in consistent_df.iterrows():
+        pattern_upper = r["pattern"].upper()
+        if pattern_upper in existing:
+            existing_grade = existing[pattern_upper]
+            if existing_grade != r["best_grade"]:
+                conflicts.append({
+                    "pattern": r["pattern"],
+                    "existing_grade": existing_grade,
+                    "new_grade": r["best_grade"],
+                    "consistency": r["consistency"],
+                    "total": r["total"],
+                })
+
+    if not conflicts:
+        print("\n[충돌 없음] 기존 패턴과 강종이 모두 일치합니다.")
+        return
+
+    print(f"\n{'=' * 60}")
+    print(f"[ 충돌 감지 리포트 ] — {len(conflicts)}건 (담당자 검토 필요)")
+    print(f"{'=' * 60}")
+    for c in conflicts:
+        print(f"  패턴    : {c['pattern']}")
+        print(f"  기존    : {c['existing_grade']}")
+        print(f"  신규    : {c['new_grade']} (일관성 {c['consistency']}%, {c['total']}건)")
+        print()
 
 
 def get_next_rule_id(cursor) -> tuple[str, int]:
@@ -148,9 +180,21 @@ def main():
     existing = get_existing_patterns(cursor)
     print(f"[기존 rule_base] {len(existing):,}개 패턴")
 
+    # 충돌 감지 리포트 (기존 패턴 + 강종 불일치)
+    print_conflict_report(consistent_df, existing)
+
     to_insert = consistent_df[~consistent_df["pattern"].str.upper().isin(existing)]
 
-    print(f"[기존 패턴 제외] {len(consistent_df) - len(to_insert):,}개 / [신규 INSERT 대상] {len(to_insert):,}개")
+    # 최소 패턴 길이 필터 (짧은 패턴은 너무 광범위하게 매칭되어 오분류 유발)
+    MIN_PATTERN_LEN = 15
+    too_short = to_insert[to_insert["pattern"].str.len() < MIN_PATTERN_LEN]
+    if not too_short.empty:
+        print(f"\n[경고] 패턴 길이 {MIN_PATTERN_LEN}자 미만 {len(too_short)}건 제외 (광범위 매칭 위험):")
+        for _, r in too_short.iterrows():
+            print(f"  '{r['pattern']}' → {r['best_grade']}")
+    to_insert = to_insert[to_insert["pattern"].str.len() >= MIN_PATTERN_LEN]
+
+    print(f"\n[기존 패턴 제외] {len(consistent_df) - len(to_insert):,}개 / [신규 INSERT 대상] {len(to_insert):,}개")
 
     if args.dry_run:
         print("\n[dry-run] 실제 변경은 하지 않습니다.")

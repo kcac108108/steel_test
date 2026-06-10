@@ -29,10 +29,10 @@ from app.services.classifier import SteelClassifier
 from app.services.size_extractor import SizeExtractor
 
 
-def run_classify(input_path: str, output_path: str, use_llm: bool) -> None:
+def run_classify(input_path: str, output_path: str, use_llm: bool, use_rule: bool, use_size: bool) -> None:
     print(f"[분류 시작] 입력: {input_path}")
 
-    df = pd.read_excel(input_path, dtype={"번호": str})
+    df = pd.read_excel(input_path, dtype={"번호": str, "수입신고번호": str, "규격번호": str})
 
     if "규격" not in df.columns:
         print("[오류] 엑셀에 '규격' 컬럼이 없습니다.")
@@ -50,18 +50,22 @@ def run_classify(input_path: str, output_path: str, use_llm: bool) -> None:
     checkpoint_path = output_path.replace(".xlsx", "_checkpoint.pkl")
 
     # 강종 분류 (Rule → RAG → LLM)
-    classifier = SteelClassifier(use_rag=True, use_llm=use_llm)
+    classifier = SteelClassifier(use_rule=use_rule, use_rag=True, use_llm=use_llm)
     results = classifier.classify_batch(spec_texts, checkpoint_path=checkpoint_path)
 
     df["강종_RAG"] = [clean(r.steel_grade) for r in results]
     df["분류방법"] = [r.method.value for r in results]
 
     # 사이즈 추출 (정확매칭 → 정규식 → LLM)
-    print("\n[사이즈 추출 시작]")
-    size_extractor = SizeExtractor()
-    size_results = size_extractor.extract_batch(spec_texts)
-    df["사이즈_RAG"] = [clean(size) for size, _ in size_results]
-    df["사이즈_방법"] = [method for _, method in size_results]
+    if use_size:
+        print("\n[사이즈 추출 시작]")
+        size_extractor = SizeExtractor()
+        size_results = size_extractor.extract_batch(spec_texts)
+        df["사이즈_RAG"] = [clean(size) for size, _ in size_results]
+        df["사이즈_방법"] = [method for _, method in size_results]
+    else:
+        print("\n[사이즈 추출 스킵]")
+        size_results = [("", "skipped")] * len(spec_texts)
 
     df.to_excel(output_path, index=False)
     print(f"\n[완료] 결과 저장: {output_path}")
@@ -97,6 +101,8 @@ def main():
     parser.add_argument("--input", required=True, help="입력 엑셀 파일 경로")
     parser.add_argument("--output", help="출력 엑셀 파일 경로 (미지정 시 자동 생성)")
     parser.add_argument("--no-llm", action="store_true", help="LLM 판단 비활성화")
+    parser.add_argument("--no-rule", action="store_true", help="Rule 매칭 비활성화 (RAG/LLM만 사용)")
+    parser.add_argument("--no-size", action="store_true", help="사이즈 추출 비활성화")
 
     args = parser.parse_args()
 
@@ -110,6 +116,8 @@ def main():
         input_path=args.input,
         output_path=args.output,
         use_llm=not args.no_llm,
+        use_rule=not args.no_rule,
+        use_size=not args.no_size,
     )
 
 

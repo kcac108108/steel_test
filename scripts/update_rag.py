@@ -6,11 +6,13 @@ ChromaDB 인덱스를 갱신합니다.
 
 확정 파일 컬럼: 번호, 거래품명, 규격, 강종, 사이즈
   - 강종이 있는 행만 처리
-  - 동일 규격이 이미 인덱스에 있으면 업데이트, 없으면 신규 추가
+  - 기본: 이미 존재하는 규격은 덮어쓰지 않음 (insert_only)
+  - --upsert 옵션: 이미 존재하는 규격도 덮어씀 (초기 구축 후 confirmed 반영 시)
 
 사용법:
   python scripts/update_rag.py
   python scripts/update_rag.py --confirmed-dir confirmed
+  python scripts/update_rag.py --confirmed-dir confirmed/_tmp --upsert
 """
 
 import os
@@ -79,9 +81,11 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
 def main():
     parser = argparse.ArgumentParser(description="RAG 인덱스 갱신")
     parser.add_argument("--confirmed-dir", default="confirmed", help="확정 파일 폴더 경로")
+    parser.add_argument("--upsert", action="store_true", help="기존 항목도 덮어씀 (기본: insert_only)")
     args = parser.parse_args()
 
-    print(f"[RAG 갱신 시작] 폴더: {args.confirmed_dir}")
+    insert_only = not args.upsert
+    print(f"[RAG 갱신 시작] 폴더: {args.confirmed_dir}, 모드: {'upsert' if args.upsert else 'insert_only'}")
     df = load_confirmed_files(args.confirmed_dir)
     df = preprocess(df)
     print(f"\n[갱신 대상] {len(df):,}건")
@@ -96,7 +100,7 @@ def main():
     ]
 
     rag = RAGService()
-    rag.index_history(records)
+    rag.index_history(records, insert_only=insert_only)
     print("[완료] RAG 갱신 완료")
 
 

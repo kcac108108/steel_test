@@ -10,6 +10,8 @@
 import re
 import json
 import time
+import pickle
+import os
 from pathlib import Path
 from typing import Optional
 from openai import OpenAI, RateLimitError
@@ -57,16 +59,26 @@ def _build_exact_lookup(confirmed_dir: str = "confirmed") -> dict[str, str]:
     return lookup.drop_duplicates("spec_key", keep="last").set_index("spec_key")["size_val"].to_dict()
 
 
-# 모듈 로드 시 사전 구축 (한 번만)
 _EXACT_LOOKUP: dict[str, str] = {}
+_SIZE_CACHE_PATH = "size_lookup.pkl"
 
 
 def _get_exact_lookup() -> dict[str, str]:
     global _EXACT_LOOKUP
-    if not _EXACT_LOOKUP:
-        print("  [사이즈] 확정 데이터 사전 로드 중...")
+    if _EXACT_LOOKUP:
+        return _EXACT_LOOKUP
+
+    if os.path.exists(_SIZE_CACHE_PATH):
+        with open(_SIZE_CACHE_PATH, "rb") as f:
+            _EXACT_LOOKUP = pickle.load(f)
+        print(f"  [사이즈] 사전 로드 완료: {len(_EXACT_LOOKUP):,}건")
+    else:
+        print("  [사이즈] 확정 데이터 사전 구축 중...")
         _EXACT_LOOKUP = _build_exact_lookup()
-        print(f"  [사이즈] 사전 {len(_EXACT_LOOKUP):,}건 준비 완료")
+        with open(_SIZE_CACHE_PATH, "wb") as f:
+            pickle.dump(_EXACT_LOOKUP, f)
+        print(f"  [사이즈] 사전 구축 완료: {len(_EXACT_LOOKUP):,}건")
+
     return _EXACT_LOOKUP
 
 

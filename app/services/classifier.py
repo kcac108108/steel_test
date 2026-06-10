@@ -69,6 +69,7 @@ class SteelClassifier:
             print(f"  [RULE] {rule_classified:,}건 분류 완료")
 
         # 2단계: RAG 배치 검색 - Rule 미분류 건만
+        hints_map: dict[int, list[dict]] = {}
         if self._rag:
             rag_indices = [
                 i for i, r in enumerate(results)
@@ -76,10 +77,12 @@ class SteelClassifier:
             ]
             rag_texts = [spec_texts[i] for i in rag_indices]
             print(f"  [RAG] {len(rag_texts):,}건 배치 검색 시작...")
-            rag_results = self._rag.search_batch(rag_texts)
-            for idx, rag_result in zip(rag_indices, rag_results):
+            rag_with_hints = self._rag.search_batch_with_hints(rag_texts)
+            for idx, (rag_result, hints) in zip(rag_indices, rag_with_hints):
                 if rag_result:
                     results[idx] = rag_result
+                else:
+                    hints_map[idx] = hints
             rag_classified = sum(1 for r in results if r.method == ClassifyMethod.RAG)
             print(f"  [RAG] {rag_classified:,}건 분류 완료")
 
@@ -107,7 +110,7 @@ class SteelClassifier:
             llm_done: dict = dict(checkpoint_saved)
 
             for count, i in enumerate(unclassified_indices, 1):
-                llm_result = self._llm.classify(spec_texts[i])
+                llm_result = self._llm.classify(spec_texts[i], rag_hints=hints_map.get(i))
                 if llm_result:
                     results[i] = llm_result
                 llm_done[i] = results[i]

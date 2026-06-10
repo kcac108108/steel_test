@@ -97,9 +97,14 @@ class RAGService:
         )
         return [item.embedding for item in resp.data]
 
-    def index_history(self, records: list[HistoryRecord], batch_size: int = 500) -> None:
-        """분류 이력 데이터를 ChromaDB에 인덱싱"""
+    def index_history(self, records: list[HistoryRecord], insert_only: bool = False, batch_size: int = 500) -> None:
+        """분류 이력 데이터를 ChromaDB에 인덱싱
+
+        insert_only=True: 이미 존재하는 규격은 덮어쓰지 않음 (신규만 추가)
+        insert_only=False: 기존 항목도 덮어씀 (초기 구축 시 사용)
+        """
         total = len(records)
+        skipped = 0
         for i in range(0, total, batch_size):
             batch = records[i : i + batch_size]
 
@@ -110,8 +115,22 @@ class RAGService:
             deduped = [batch[j] for j in seen.values()]
 
             texts = [r.spec_text for r in deduped]
-            embeddings = self._embed_batch(texts)
             ids = list(seen.keys())
+
+            # insert_only: 이미 존재하는 ID 제외
+            if insert_only:
+                existing = set(self._collection.get(ids=ids)["ids"])
+                new_indices = [k for k, id_ in enumerate(ids) if id_ not in existing]
+                if not new_indices:
+                    skipped += len(deduped)
+                    print(f"  [{i + len(batch):,}/{total:,}] 진행 중... (신규 0건, 전체 스킵)")
+                    continue
+                texts = [texts[k] for k in new_indices]
+                ids = [ids[k] for k in new_indices]
+                deduped = [deduped[k] for k in new_indices]
+                skipped += len(seen) - len(new_indices)
+
+            embeddings = self._embed_batch(texts)
             metadatas = [
                 {"steel_grade": r.steel_grade, "size": r.size, "method": r.method}
                 for r in deduped
@@ -122,13 +141,107 @@ class RAGService:
                 documents=texts,
                 metadatas=metadatas,
             )
-            print(f"  [{i + len(batch):,}/{total:,}] 진행 중...")
-        print(f"[RAG] {total:,}건 인덱싱 완료")
+            print(f"  [{i + len(batch):,}/{total:,}] 진행 중..." + (f" (기존 {skipped}건 스킵)" if insert_only and skipped else ""))
+        print(f"[RAG] {total:,}건 인덱싱 완료" + (f" (기존 존재로 스킵: {skipped}건)" if insert_only else ""))
 
     def search(self, spec_text: str) -> Optional[ClassifyResult]:
         """단건 유사도 검색"""
         results = self.search_batch([spec_text])
         return results[0]
+
+    def search_batch_with_hints(
+        self,
+        spec_texts: list[str],
+        n_hints: int = 3,
+        min_hint_sim: float = 0.70,
+        batch_size: int = 500,
+    ) -> list[tuple[Optional["ClassifyResult"], list[dict]]]:
+        """배치 검색 + LLM 힌트 동시 반환 (임베딩 1회 호출로 처리)
+        Returns: list of (ClassifyResult | None, [{grade, similarity}, ...])
+        """
+        if self._collection.count() == 0:
+            return [(None, [])] * len(spec_texts)
+
+        all_results: list[tuple[Optional[ClassifyResult], list[dict]]] = []
+
+        for i in range(0, len(spec_texts), batch_size):
+            batch_texts = spec_texts[i : i + batch_size]
+
+            valid_indices = [j for j, t in enumerate(batch_texts) if t.strip()]
+            valid_texts = [batch_texts[j] for j in valid_indices]
+
+            if not valid_texts:
+                all_results.extend([(None, [])] * len(batch_texts))
+                continue
+
+            embeddings = self._embed_batch(valid_texts)
+
+            query_results = self._collection.query(
+                query_embeddings=embeddings,
+                n_results=max(5, n_hints),
+                include=["documents", "metadatas", "distances"],
+            )
+
+            batch_results: list[tuple[Optional[ClassifyResult], list[dict]]] = [(None, [])] * len(batch_texts)
+            for k, j in enumerate(valid_indices):
+                spec_text = batch_texts[j]
+                distances = query_results["distances"][k]
+                metadatas = query_results["metadatas"][k]
+                documents = query_results["documents"][k]
+
+                if not distances:
+                    batch_results[j] = (None, [])
+                    continue
+
+                # 힌트 수집 (임계값 무관, min_hint_sim 이상)
+                hints: list[dict] = []
+                seen_grades: set[str] = set()
+                for dist, meta in zip(distances, metadatas):
+                    sim = 1.0 - dist
+                    if sim < min_hint_sim:
+                        break
+                    grade = meta.get("steel_grade", "")
+                    if grade and str(grade).strip() not in ("", "0", "0.0", "nan"):
+                        if grade not in seen_grades:
+                            seen_grades.add(grade)
+                            hints.append({"grade": grade, "similarity": round(sim, 3)})
+                    if len(hints) >= n_hints:
+                        break
+
+                # 분류 결과 (기존 search_batch 로직과 동일)
+                classify_result: Optional[ClassifyResult] = None
+                if 1.0 - distances[0] >= settings.similarity_threshold:
+                    selected_meta, selected_doc, selected_sim = None, None, None
+                    for dist, meta, doc in zip(distances, metadatas, documents):
+                        sim = 1.0 - dist
+                        if sim < settings.similarity_threshold:
+                            break
+                        grade = meta.get("steel_grade", "")
+                        if not grade or str(grade).strip() in ("", "0", "0.0", "nan"):
+                            continue
+                        if selected_meta is None:
+                            selected_meta, selected_doc, selected_sim = meta, doc, sim
+                        if self._has_matching_codes(grade, spec_text):
+                            selected_meta, selected_doc, selected_sim = meta, doc, sim
+                            break
+
+                    if selected_meta is not None:
+                        steel_grade = selected_meta.get("steel_grade", "")
+                        steel_grade = self._correct_grade_codes(steel_grade, spec_text)
+                        classify_result = ClassifyResult(
+                            spec_text=spec_text,
+                            steel_grade=steel_grade,
+                            size=selected_meta["size"],
+                            method=ClassifyMethod.RAG,
+                            confidence=round(selected_sim, 4),
+                            similar_spec=selected_doc,
+                        )
+
+                batch_results[j] = (classify_result, hints)
+
+            all_results.extend(batch_results)
+
+        return all_results
 
     def search_batch(self, spec_texts: list[str], batch_size: int = 500) -> list[Optional[ClassifyResult]]:
         """
