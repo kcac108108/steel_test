@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>철강 강종·사이즈 자동분류 시스템</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Malgun Gothic', sans-serif; background: #ffffff; color: #1e293b; display: flex; flex-direction: column; height: 100vh; }
+
+/* ── 헤더 ── */
+.header { background: linear-gradient(135deg, #0f2744 0%, #1e3a5f 100%); color: white; padding: 0 28px; height: 78px; display: flex; align-items: center; gap: 14px; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.header-icon { width: 42px; height: 42px; background: rgba(255,255,255,0.12); border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.header h1 { font-size: 19px; font-weight: 700; letter-spacing: -0.5px; }
+.header .sub { font-size: 13px; opacity: 0.72; margin-left: 8px; }
+
+/* ── 바디 ── */
+.body { display: flex; flex: 1; overflow: hidden; }
+
+/* ── 사이드바 ── */
+.sidebar { width: 210px; background: #0f2744; color: white; flex-shrink: 0; padding: 16px 0; border-top: 1px solid rgba(255,255,255,0.25); }
+.sidebar .menu-label { font-size: 14px; color: rgba(255,255,255,0.6); padding: 16px 16px 8px; letter-spacing: 0.3px; font-weight: 700; }
+.menu-item { display: flex; align-items: center; gap: 10px; padding: 13px 16px; font-size: 13.5px; color: rgba(255,255,255,0.78); cursor: pointer; margin: 3px 8px; border-radius: 8px; transition: all 0.15s; border: 1px solid transparent; }
+.menu-item:hover { background: rgba(255,255,255,0.1); color: white; border-color: rgba(255,255,255,0.08); }
+.menu-item.active { background: rgba(59,130,246,0.28); color: white; font-weight: 600; border-color: rgba(59,130,246,0.4); }
+.menu-item .icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+.sidebar-divider { border: none; border-top: 1px solid rgba(255,255,255,0.25); margin: 28px 0; }
+
+/* ── 콘텐츠 ── */
+.content { flex: 1; overflow-y: auto; padding: 16px 26px; }
+.page { display: none; }
+.page.active { display: block; }
+.page-title { font-size: 19px; font-weight: 700; color: #0f2744; margin-bottom: 4px; }
+.page-sub   { font-size: 13px; color: #64748b; margin-bottom: 14px; }
+
+/* ── 카드 ── */
+.card { background: white; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.04); border: 1px solid #d1d5db; }
+.card-title { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.7px; font-weight: 600; margin-bottom: 14px; }
+
+/* ── 레이아웃 ── */
+.two-col { display: grid; grid-template-columns: 290px 1fr; gap: 18px; align-items: start; }
+.left-col  { display: flex; flex-direction: column; gap: 10px; }
+.right-col { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── 드롭존 ── */
+.dropzone { border: 2px dashed #e2e8f0; border-radius: 10px; padding: 14px; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; cursor: pointer; background: #fafbfd; transition: all 0.2s; position: relative; }
+.dropzone:hover, .dropzone.dragover { border-color: #3b82f6; background: #eff6ff; }
+.dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.dropzone .dz-icon { font-size: 26px; margin-bottom: 8px; }
+.dropzone .dz-txt  { font-size: 12px; color: #64748b; line-height: 1.6; }
+.dropzone .dz-name { margin-top: 8px; font-size: 13px; color: #1e3a5f; font-weight: 600; display: none; }
+.dropzone .dz-info { font-size: 11px; color: #94a3b8; margin-top: 2px; display: none; }
+.dropzone.has-file .dz-icon { display: none; }
+.dropzone.has-file .dz-txt  { display: none; }
+
+/* ── 토글 ── */
+.opt-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 10px; margin-bottom: 4px; background: #f8fafc; border: 1px solid #e2e8f0; transition: all 0.2s; }
+.opt-row:last-child { margin-bottom: 0; }
+.opt-row.on { background: #eff6ff; border-color: #bfdbfe; }
+.opt-left { display: flex; align-items: center; gap: 10px; }
+.opt-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; background: #e2e8f0; transition: background 0.2s; }
+.opt-row.on .opt-icon { background: #dbeafe; }
+.opt-name { font-size: 13px; font-weight: 600; color: #1e293b; }
+.opt-row.on .opt-name { color: #1d4ed8; }
+.opt-sub  { font-size: 11px; color: #64748b; margin-top: 1px; }
+.toggle { width: 38px; height: 21px; background: #3b82f6; border-radius: 11px; position: relative; cursor: pointer; flex-shrink: 0; transition: background 0.2s; }
+.toggle.off { background: #cbd5e1; }
+.toggle::after { content: ''; position: absolute; width: 15px; height: 15px; background: white; border-radius: 50%; top: 3px; right: 3px; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+.toggle.off::after { right: auto; left: 3px; }
+
+/* ── 버튼 ── */
+.btn { width: 100%; padding: 11px; border: none; border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: 'Malgun Gothic', sans-serif; transition: all 0.15s; letter-spacing: -0.2px; }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
+.btn-navy  { background: linear-gradient(135deg, #1e3a5f, #0f2744); color: white; }
+.btn-navy:not(:disabled):hover  { opacity: 0.88; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(15,39,68,0.28); }
+.btn-green { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+.btn-green:not(:disabled):hover { opacity: 0.88; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(16,185,129,0.28); }
+
+/* ── 아이들 카드 ── */
+.match-height { min-height: 215px; }
+.idle-card { background: white; border-radius: 12px; padding: 24px 20px; min-height: 215px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.04); border: 1px solid #d1d5db; }
+.idle-icon  { font-size: 36px; margin-bottom: 12px; }
+.idle-title { font-size: 14px; color: #1e3a5f; font-weight: 700; line-height: 1.7; }
+.idle-sub   { font-size: 12px; color: #64748b; margin-top: 5px; }
+
+/* ── 스텝 플로우 ── */
+.step-flow { display: flex; align-items: flex-start; margin-bottom: 18px; }
+.step-node  { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.step-circle { width: 36px; height: 36px; border-radius: 50%; border: 2px solid #e2e8f0; background: white; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #cbd5e1; transition: all 0.3s; flex-shrink: 0; }
+.step-circle.active { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; box-shadow: 0 0 0 4px rgba(59,130,246,0.1); }
+.step-circle.done   { border-color: #10b981; background: #10b981; color: white; }
+.step-label { font-size: 11px; color: #64748b; font-weight: 500; white-space: nowrap; text-align: center; max-width: 70px; line-height: 1.3; }
+.step-label.active { color: #3b82f6; font-weight: 600; }
+.step-label.done   { color: #10b981; font-weight: 600; }
+.step-line { flex: 1; height: 2px; background: #e2e8f0; margin: 17px 4px 0; transition: background 0.4s; }
+.step-line.done { background: #10b981; }
+
+/* ── 진행 바 ── */
+.prog-text     { font-size: 13px; color: #475569; margin-bottom: 8px; min-height: 20px; }
+.prog-bar-wrap { background: #f1f5f9; border-radius: 6px; height: 8px; overflow: hidden; }
+.prog-bar      { height: 100%; background: linear-gradient(90deg, #1e3a5f, #3b82f6); border-radius: 6px; transition: width 0.4s ease; width: 0%; }
+
+/* ── 통계 카드 ── */
+.stat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.stat-box { background: white; border-radius: 12px; padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.04); border: 1px solid #d1d5db; border-top: 3px solid #e2e8f0; }
+.stat-box.s-total { border-top-color: #1e3a5f; }
+.stat-box.s-acc   { border-top-color: #10b981; }
+.stat-box.s-rule  { border-top-color: #f59e0b; }
+.stat-box.s-rag   { border-top-color: #3b82f6; }
+.stat-box.s-un    { border-top-color: #ef4444; }
+.stat-val { font-size: 26px; font-weight: 800; color: #0f172a; letter-spacing: -1px; }
+.stat-box.s-acc  .stat-val { color: #059669; }
+.stat-box.s-rule .stat-val { color: #d97706; }
+.stat-box.s-rag  .stat-val { color: #2563eb; }
+.stat-box.s-un   .stat-val { color: #dc2626; }
+.stat-lbl { font-size: 11px; color: #64748b; margin-top: 5px; font-weight: 500; }
+
+/* ── 정확도 바 ── */
+.acc-bar  { height: 7px; background: #f1f5f9; border-radius: 4px; margin: 10px 0 5px; overflow: hidden; }
+.acc-fill { height: 100%; background: linear-gradient(90deg, #10b981, #3b82f6); border-radius: 4px; transition: width 0.5s; }
+.acc-lbl  { display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; }
+
+/* ── 방법별 바 ── */
+.mrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.mrow:last-child { margin-bottom: 0; }
+.mname { width: 56px; font-size: 12px; font-weight: 700; }
+.mwrap { flex: 1; background: #f1f5f9; border-radius: 5px; height: 24px; overflow: hidden; }
+.mbar  { height: 100%; border-radius: 5px; display: flex; align-items: center; padding-left: 10px; font-size: 11px; color: white; font-weight: 700; transition: width 0.6s ease; min-width: 40px; }
+.mbar-rule { background: linear-gradient(90deg, #10b981, #34d399); }
+.mbar-rag  { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.mbar-llm  { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.mbar-un   { background: linear-gradient(90deg, #94a3b8, #cbd5e1); }
+.mcnt { width: 72px; font-size: 12px; color: #64748b; text-align: right; font-weight: 500; }
+
+/* ── 완료/에러 배너 ── */
+.done-banner { background: linear-gradient(135deg, #ecfdf5, #d1fae5); border: 1px solid #6ee7b7; border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; gap: 14px; }
+.done-banner .done-icon  { font-size: 30px; }
+.done-banner .done-title { font-size: 15px; font-weight: 700; color: #065f46; }
+.done-banner .done-sub   { font-size: 12px; color: #059669; margin-top: 3px; }
+.err-banner { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; gap: 14px; }
+.err-banner .err-icon  { font-size: 26px; }
+.err-banner .err-title { font-size: 15px; font-weight: 700; color: #991b1b; }
+.err-banner .err-msg   { font-size: 12px; color: #ef4444; margin-top: 3px; word-break: break-all; }
+
+.badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-left: 6px; }
+.badge-g { background: #d1fae5; color: #065f46; }
+.badge-o { background: #fef3c7; color: #92400e; }
+.badge-b { background: #dbeafe; color: #1e40af; }
+
+/* ── 갱신 페이지 ── */
+.upd-two-col { display: grid; grid-template-columns: 290px 1fr; gap: 18px; align-items: start; }
+.upd-left  { display: flex; flex-direction: column; gap: 10px; }
+.upd-right { display: flex; flex-direction: column; gap: 10px; }
+
+.flow-box   { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; font-size: 12px; }
+.flow-title { font-size: 11px; font-weight: 700; color: #3b82f6; margin-bottom: 10px; letter-spacing: 0.3px; }
+.flow-step  { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+.flow-step:last-child { margin-bottom: 0; }
+.flow-num   { background: #3b82f6; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.flow-arrow { color: #cbd5e1; font-size: 12px; padding-left: 14px; margin: 2px 0; }
+
+.upd-opt-sub   { font-size: 11px; color: #64748b; margin-top: 3px; line-height: 1.5; }
+
+.warn-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 7px 12px; font-size: 11.5px; color: #78350f; line-height: 1.5; }
+
+.res-item   { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #f8fafc; }
+.res-item:last-child { border-bottom: none; }
+.res-ico    { font-size: 18px; width: 26px; text-align: center; }
+.res-title  { font-size: 13px; font-weight: 600; }
+.res-detail { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.res-cnt    { font-size: 16px; font-weight: 800; color: #0f2744; white-space: nowrap; margin-left: auto; }
+
+.conflict-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+.conflict-box:last-child { margin-bottom: 0; }
+.conflict-pattern { font-size: 13px; font-weight: 600; margin-bottom: 7px; color: #0f172a; }
+.conflict-grade   { font-size: 12px; color: #64748b; margin-bottom: 2px; }
+.conflict-btns    { display: flex; gap: 8px; margin-top: 10px; }
+.cbtn { flex: 1; padding: 8px; border: none; border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 600; font-family: 'Malgun Gothic', sans-serif; transition: all 0.15s; }
+.cbtn:disabled    { opacity: 0.45; cursor: not-allowed; }
+.cbtn-apply   { background: #d1fae5; color: #065f46; }
+.cbtn-apply:not(:disabled):hover { background: #10b981; color: white; }
+.cbtn-skip    { background: #f1f5f9; color: #64748b; }
+.cbtn-skip:not(:disabled):hover  { background: #e2e8f0; }
+.cbtn-applied { background: #d1fae5; color: #10b981; }
+.cbtn-skipped { background: #f1f5f9; color: #94a3b8; }
+
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">⚙</div>
+  <h1>철강 강종·사이즈 자동분류 시스템</h1>
+  <span class="sub">Rule → RAG → LLM 파이프라인</span>
+</div>
+
+<div class="body">
+  <div class="sidebar">
+    <div class="menu-label">메뉴</div>
+    <div class="menu-item active" id="nav-classify" onclick="goPage('classify', this)">
+      <span class="icon">📊</span> 분류 실행
+    </div>
+    <div class="menu-item" id="nav-update" onclick="goPage('update', this)">
+      <span class="icon">🔄</span> 데이터 갱신
+    </div>
+    <div class="menu-item" id="nav-verify" onclick="goPage('verify', this)">
+      <span class="icon">📈</span> 검증·통계
+    </div>
+    <hr class="sidebar-divider">
+    <div class="menu-label">시스템</div>
+    <div class="menu-item" onclick="window.open('/docs','_blank')">
+      <span class="icon">📋</span> API 문서 <span style="font-size:10px;opacity:0.4;margin-left:auto">↗</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ===== 분류 실행 ===== -->
+    <div id="page-classify" class="page active">
+      <div class="page-title">📊 분류 실행</div>
+      <div class="page-sub">강종 및 사이즈 분류가 필요한 엑셀 파일을 업로드하면 Rule → RAG → LLM 순서로 강종을 분류하고 사이즈를 자동 추출합니다.</div>
+
+      <div class="two-col">
+
+        <!-- 왼쪽 -->
+        <div class="left-col">
+          <div class="card match-height">
+            <div class="card-title">파일 업로드</div>
+            <div class="dropzone" id="cls-drop" ondragover="onDragOver(event,'cls-drop')" ondragleave="onDragLeave('cls-drop')" ondrop="onDrop(event,'cls')">
+              <input type="file" accept=".xlsx,.xls" id="cls-file-input" onchange="onFileSelect(event,'cls')">
+              <div class="dz-txt">📂 파일을 드래그하거나 클릭하여<br>선택하세요</div>
+              <div class="dz-name" id="cls-fname"></div>
+              <div class="dz-info" id="cls-finfo"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">분류 옵션</div>
+            <div class="opt-row on" id="row-cls-rule">
+              <div class="opt-left">
+                <div class="opt-icon">📋</div>
+                <div><div class="opt-name">Rule 매칭</div><div class="opt-sub">Oracle 룰베이스 사용</div></div>
+              </div>
+              <div class="toggle" id="tog-cls-rule" onclick="toggleOpt('tog-cls-rule','row-cls-rule')"></div>
+            </div>
+            <div class="opt-row on" id="row-cls-rag">
+              <div class="opt-left">
+                <div class="opt-icon">🔍</div>
+                <div><div class="opt-name">RAG 검색</div><div class="opt-sub">유사사례 벡터 검색</div></div>
+              </div>
+              <div class="toggle" id="tog-cls-rag" onclick="toggleOpt('tog-cls-rag','row-cls-rag')"></div>
+            </div>
+            <div class="opt-row on" id="row-cls-llm">
+              <div class="opt-left">
+                <div class="opt-icon">🤖</div>
+                <div><div class="opt-name">LLM 판단</div><div class="opt-sub">GPT-4o-mini 사용</div></div>
+              </div>
+              <div class="toggle" id="tog-cls-llm" onclick="toggleOpt('tog-cls-llm','row-cls-llm')"></div>
+            </div>
+            <div class="opt-row on" id="row-cls-size">
+              <div class="opt-left">
+                <div class="opt-icon">📐</div>
+                <div><div class="opt-name">사이즈 추출</div><div class="opt-sub">두께·폭·길이 자동 추출</div></div>
+              </div>
+              <div class="toggle" id="tog-cls-size" onclick="toggleOpt('tog-cls-size','row-cls-size')"></div>
+            </div>
+          </div>
+
+          <button class="btn btn-navy"  id="cls-start-btn" onclick="startClassify()" disabled>▶ 분류 시작</button>
+          <button class="btn btn-green hidden" id="cls-down-btn"  onclick="downloadResult()">⬇ 결과 파일 다운로드</button>
+        </div>
+
+        <!-- 오른쪽 -->
+        <div class="right-col" id="cls-right">
+
+          <!-- 대기 -->
+          <div id="cls-idle-msg" class="idle-card">
+            <div class="idle-icon">📊</div>
+            <div class="idle-title">파일을 업로드하고<br>분류 시작 버튼을 누르세요</div>
+            <div class="idle-sub">강종·사이즈 자동 분류 · .xlsx 파일</div>
+          </div>
+
+          <!-- 진행 카드 -->
+          <div id="cls-progress-card" class="card match-height hidden">
+            <div class="card-title">진행 상황</div>
+
+            <div class="step-flow" id="cls-steps">
+              <div class="step-node">
+                <div class="step-circle" id="step-rule">1</div>
+                <div class="step-label" id="step-rule-lbl">Rule</div>
+              </div>
+              <div class="step-line" id="sline-1"></div>
+              <div class="step-node">
+                <div class="step-circle" id="step-rag">2</div>
+                <div class="step-label" id="step-rag-lbl">RAG</div>
+              </div>
+              <div class="step-line" id="sline-2"></div>
+              <div class="step-node">
+                <div class="step-circle" id="step-llm">3</div>
+                <div class="step-label" id="step-llm-lbl">LLM</div>
+              </div>
+              <div class="step-line" id="sline-3"></div>
+              <div class="step-node">
+                <div class="step-circle" id="step-size">4</div>
+                <div class="step-label" id="step-size-lbl">사이즈</div>
+              </div>
+            </div>
+
+            <div class="prog-text" id="cls-prog-text">준비 중...</div>
+            <div class="prog-bar-wrap"><div class="prog-bar" id="cls-prog-bar"></div></div>
+          </div>
+
+          <!-- 완료 배너 -->
+          <div id="cls-done-banner" class="done-banner hidden">
+            <div class="done-icon">✅</div>
+            <div>
+              <div class="done-title" id="cls-done-title">분류 완료!</div>
+              <div class="done-sub"   id="cls-done-sub"></div>
+            </div>
+          </div>
+
+          <!-- 에러 배너 -->
+          <div id="cls-err-banner" class="err-banner hidden">
+            <div class="err-icon">❌</div>
+            <div>
+              <div class="err-title">오류 발생</div>
+              <div class="err-msg" id="cls-err-msg"></div>
+            </div>
+          </div>
+
+          <!-- 통계 카드 -->
+          <div id="cls-stat-grid" class="stat-grid hidden">
+            <div class="stat-box s-total"><div class="stat-val" id="st-total">—</div><div class="stat-lbl">전체 건수</div></div>
+            <div class="stat-box s-acc">  <div class="stat-val" id="st-acc">—</div>  <div class="stat-lbl">분류율</div></div>
+            <div class="stat-box s-rule"> <div class="stat-val" id="st-rule">—</div> <div class="stat-lbl">Rule 분류</div></div>
+            <div class="stat-box s-rag">  <div class="stat-val" id="st-rag">—</div>  <div class="stat-lbl">RAG 분류</div></div>
+            <div class="stat-box s-un">   <div class="stat-val" id="st-un">—</div>   <div class="stat-lbl">미분류</div></div>
+          </div>
+
+          <!-- 방법별 현황 -->
+          <div id="cls-method-card" class="card hidden">
+            <div class="card-title">강종 분류 현황 <span class="badge badge-g">완료</span></div>
+            <div class="acc-bar"><div class="acc-fill" id="cls-acc-fill" style="width:0%"></div></div>
+            <div class="acc-lbl"><span id="cls-acc-lbl">—</span><span id="cls-acc-lbl2">—</span></div>
+            <div style="margin-top:16px">
+              <div class="mrow">
+                <div class="mname" style="color:#10b981">Rule</div>
+                <div class="mwrap"><div class="mbar mbar-rule" id="mb-rule" style="width:0%">—</div></div>
+                <div class="mcnt" id="mc-rule">—</div>
+              </div>
+              <div class="mrow">
+                <div class="mname" style="color:#3b82f6">RAG</div>
+                <div class="mwrap"><div class="mbar mbar-rag" id="mb-rag" style="width:0%">—</div></div>
+                <div class="mcnt" id="mc-rag">—</div>
+              </div>
+              <div class="mrow">
+                <div class="mname" style="color:#f59e0b">LLM</div>
+                <div class="mwrap"><div class="mbar mbar-llm" id="mb-llm" style="width:0%">—</div></div>
+                <div class="mcnt" id="mc-llm">—</div>
+              </div>
+              <div class="mrow">
+                <div class="mname" style="color:#94a3b8">미분류</div>
+                <div class="mwrap"><div class="mbar mbar-un" id="mb-un" style="width:0%">—</div></div>
+                <div class="mcnt" id="mc-un">—</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 데이터 갱신 ===== -->
+    <div id="page-update" class="page">
+      <div class="page-title">🔄 데이터 갱신</div>
+      <div class="page-sub">업무담당자가 검토·수정 완료한 파일을 올리면 RAG, 룰베이스, 사이즈 사전을 갱신합니다.</div>
+
+      <div class="upd-two-col">
+        <!-- 왼쪽 -->
+        <div class="upd-left">
+          <div class="card match-height">
+            <div class="card-title">파일 업로드</div>
+            <div class="dropzone" id="upd-drop" ondragover="onDragOver(event,'upd-drop')" ondragleave="onDragLeave('upd-drop')" ondrop="onDrop(event,'upd')">
+              <input type="file" accept=".xlsx,.xls" id="upd-file-input" onchange="onFileSelect(event,'upd')">
+              <div class="dz-txt">📂 파일을 드래그하거나 클릭하여<br>선택하세요</div>
+              <div class="dz-name" id="upd-fname"></div>
+              <div class="dz-info" id="upd-finfo"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">갱신 옵션</div>
+            <div class="opt-row on" id="row-upd-rag">
+              <div class="opt-left">
+                <div class="opt-icon">🔍</div>
+                <div><div class="opt-name">RAG 유사사례 추가</div><div class="opt-sub">유사사례 DB 갱신</div></div>
+              </div>
+              <div class="toggle" id="tog-upd-rag" onclick="toggleOpt('tog-upd-rag','row-upd-rag')"></div>
+            </div>
+            <div class="opt-row on" id="row-upd-rule">
+              <div class="opt-left">
+                <div class="opt-icon">📋</div>
+                <div><div class="opt-name">룰베이스 갱신</div><div class="opt-sub">일관성 95% 이상 패턴 추가</div></div>
+              </div>
+              <div class="toggle" id="tog-upd-rule" onclick="toggleOpt('tog-upd-rule','row-upd-rule')"></div>
+            </div>
+            <div class="opt-row on" id="row-upd-size">
+              <div class="opt-left">
+                <div class="opt-icon">📐</div>
+                <div><div class="opt-name">사이즈 사전 갱신</div><div class="opt-sub">규격→사이즈 매핑 추가</div></div>
+              </div>
+              <div class="toggle" id="tog-upd-size" onclick="toggleOpt('tog-upd-size','row-upd-size')"></div>
+            </div>
+          </div>
+
+          <div class="warn-box">⚠ 룰베이스 충돌은 오른쪽 화면에서 검토 후 적용하세요.</div>
+          <button class="btn btn-navy" id="upd-start-btn" onclick="startUpdate()" disabled>🔄 갱신 실행</button>
+        </div>
+
+        <!-- 오른쪽 -->
+        <div class="upd-right" id="upd-right">
+
+          <div id="upd-idle-msg" class="idle-card">
+            <div class="idle-icon">🔄</div>
+            <div class="idle-title">파일을 업로드하고<br>갱신 실행 버튼을 누르세요</div>
+            <div class="idle-sub">검토 완료된 분류 결과 · .xlsx 파일</div>
+          </div>
+
+          <!-- 진행 카드 -->
+          <div id="upd-progress-card" class="card hidden">
+            <div class="card-title">진행 상황</div>
+            <div class="step-flow">
+              <div class="step-node">
+                <div class="step-circle" id="ustep-rag">1</div>
+                <div class="step-label"  id="ustep-rag-lbl">RAG</div>
+              </div>
+              <div class="step-line" id="usline-1"></div>
+              <div class="step-node">
+                <div class="step-circle" id="ustep-rule">2</div>
+                <div class="step-label"  id="ustep-rule-lbl">룰베이스</div>
+              </div>
+              <div class="step-line" id="usline-2"></div>
+              <div class="step-node">
+                <div class="step-circle" id="ustep-size">3</div>
+                <div class="step-label"  id="ustep-size-lbl">사이즈 사전</div>
+              </div>
+            </div>
+            <div class="prog-text" id="upd-prog-text">처리 중...</div>
+            <div class="prog-bar-wrap"><div class="prog-bar" id="upd-prog-bar"></div></div>
+          </div>
+
+          <!-- 완료 배너 -->
+          <div id="upd-done-banner" class="done-banner hidden">
+            <div class="done-icon">✅</div>
+            <div>
+              <div class="done-title">갱신 완료!</div>
+              <div class="done-sub" id="upd-done-sub"></div>
+            </div>
+          </div>
+
+          <!-- 에러 배너 -->
+          <div id="upd-err-banner" class="err-banner hidden">
+            <div class="err-icon">❌</div>
+            <div>
+              <div class="err-title">오류 발생</div>
+              <div class="err-msg" id="upd-err-msg"></div>
+            </div>
+          </div>
+
+          <!-- 갱신 결과 -->
+          <div id="upd-result-card" class="card hidden">
+            <div class="card-title">갱신 결과 <span class="badge badge-g">완료</span></div>
+            <div id="upd-result-body"></div>
+          </div>
+
+          <!-- 충돌 검토 -->
+          <div id="upd-conflict-card" class="card hidden">
+            <div class="card-title">룰베이스 충돌 검토 <span class="badge badge-o" id="upd-conflict-badge">—</span></div>
+            <div style="font-size:12px;color:#94a3b8;margin-bottom:12px">기존 강종과 달라 자동 적용되지 않은 패턴입니다.</div>
+            <div id="upd-conflict-list"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 검증·통계 ===== -->
+    <div id="page-verify" class="page">
+      <div class="page-title">📈 검증·통계</div>
+      <div class="page-sub">담당자가 검토·확정한 파일을 업로드하면 강종·사이즈 정확도와 커버리지를 분석합니다.</div>
+
+      <div class="two-col">
+        <!-- 왼쪽 -->
+        <div class="left-col">
+          <div class="card match-height">
+            <div class="card-title">파일 업로드</div>
+            <div class="dropzone" id="vrf-drop" ondragover="onDragOver(event,'vrf-drop')" ondragleave="onDragLeave('vrf-drop')" ondrop="onDrop(event,'vrf')">
+              <input type="file" accept=".xlsx,.xls" id="vrf-file-input" onchange="onFileSelect(event,'vrf')">
+              <div class="dz-txt">📂 파일을 드래그하거나 클릭하여<br>선택하세요</div>
+              <div class="dz-name" id="vrf-fname"></div>
+              <div class="dz-info" id="vrf-finfo"></div>
+            </div>
+          </div>
+          <button class="btn btn-navy" id="vrf-start-btn" onclick="startVerify()" disabled>📈 분석 시작</button>
+        </div>
+
+        <!-- 오른쪽 -->
+        <div class="right-col">
+          <div id="vrf-idle-msg" class="idle-card">
+            <div class="idle-icon">📈</div>
+            <div class="idle-title">파일을 업로드하고<br>분석 시작 버튼을 누르세요</div>
+            <div class="idle-sub">강종·사이즈 정확도 및 커버리지 분석</div>
+          </div>
+
+          <div id="vrf-result" class="hidden">
+            <!-- 요약 카드 4개 -->
+            <div class="stat-grid" id="vrf-stat-grid" style="margin-bottom:12px">
+              <div class="stat-box s-total"><div class="stat-val" id="vrf-total">—</div><div class="stat-lbl">전체 건수</div></div>
+              <div class="stat-box s-acc">  <div class="stat-val" id="vrf-grade-cov">—</div><div class="stat-lbl">강종 커버리지</div></div>
+              <div class="stat-box s-rag">  <div class="stat-val" id="vrf-grade-acc">—</div><div class="stat-lbl">강종 정확도</div></div>
+              <div class="stat-box s-rule"> <div class="stat-val" id="vrf-size-cov">—</div> <div class="stat-lbl">사이즈 커버리지</div></div>
+              <div class="stat-box s-un">   <div class="stat-val" id="vrf-size-acc">—</div>  <div class="stat-lbl">사이즈 정확도</div></div>
+            </div>
+
+            <!-- 방법별 정확도 -->
+            <div class="card" id="vrf-method-card" style="margin-bottom:12px">
+              <div class="card-title">방법별 강종 정확도</div>
+              <div id="vrf-method-bars"></div>
+            </div>
+
+            <!-- LLM 패턴 분석 -->
+            <div class="card" id="vrf-llm-card" style="margin-bottom:12px">
+              <div class="card-title">LLM 불일치 패턴 분석</div>
+              <div id="vrf-llm-analysis"></div>
+            </div>
+
+            <!-- 불일치 목록 -->
+            <div class="card" id="vrf-mismatch-card">
+              <div class="card-title">강종 불일치 항목 <span id="vrf-mismatch-cnt" style="color:#ef4444"></span></div>
+              <div id="vrf-mismatch-list" style="max-height:300px; overflow-y:auto;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /body -->
+
+<script>
+// ─────────────────────────────────────────────
+// 상태
+// ─────────────────────────────────────────────
+let clsFile = null, clsJobId = null, clsDownloadName = '';
+let updFile = null, updJobId = null;
+let vrfFile = null;
+
+// ─────────────────────────────────────────────
+// 페이지 전환
+// ─────────────────────────────────────────────
+function goPage(name, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  el.classList.add('active');
+}
+
+// ─────────────────────────────────────────────
+// 파일 드롭존
+// ─────────────────────────────────────────────
+function onDragOver(e, id) { e.preventDefault(); document.getElementById(id).classList.add('dragover'); }
+function onDragLeave(id)   { document.getElementById(id).classList.remove('dragover'); }
+function onDrop(e, prefix) {
+  e.preventDefault();
+  document.getElementById(prefix + '-drop').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) setFile(prefix, file);
+}
+function onFileSelect(e, prefix) {
+  const file = e.target.files[0];
+  if (file) setFile(prefix, file);
+}
+function setFile(prefix, file) {
+  const mb = file.size > 1024 * 1024 ? (file.size / 1024 / 1024).toFixed(1) + ' MB' : (file.size / 1024).toFixed(0) + ' KB';
+  const nameEl = document.getElementById(prefix + '-fname');
+  const infoEl = document.getElementById(prefix + '-finfo');
+  nameEl.textContent = file.name;  nameEl.style.display = 'block';
+  infoEl.textContent = mb;         infoEl.style.display = 'block';
+  document.getElementById(prefix + '-drop').classList.add('has-file');
+  if (prefix === 'cls')      { clsFile = file; document.getElementById('cls-start-btn').disabled = false; }
+  else if (prefix === 'upd') { updFile = file; document.getElementById('upd-start-btn').disabled = false; }
+  else if (prefix === 'vrf') { vrfFile = file; document.getElementById('vrf-start-btn').disabled = false; }
+}
+
+// ─────────────────────────────────────────────
+// 토글
+// ─────────────────────────────────────────────
+function toggleOpt(id, rowId) {
+  const tog = document.getElementById(id);
+  tog.classList.toggle('off');
+  if (rowId) {
+    document.getElementById(rowId).classList.toggle('on', !tog.classList.contains('off'));
+  }
+}
+function isOn(id)      { return !document.getElementById(id).classList.contains('off'); }
+
+// ─────────────────────────────────────────────
+// 검증·통계
+// ─────────────────────────────────────────────
+async function startVerify() {
+  if (!vrfFile) return;
+  const btn = document.getElementById('vrf-start-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 분석 중...';
+  hide('vrf-result');
+  hide('vrf-idle-msg');
+
+  try {
+    const form = new FormData();
+    form.append('file', vrfFile);
+    const res = await fetch('/api/verify/analyze', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) { alert('오류: ' + (data.detail || '알 수 없는 오류')); return; }
+
+    setText('vrf-total',     fmt(data.total));
+    setText('vrf-grade-cov', data.grade.coverage + '%');
+    setText('vrf-grade-acc', data.grade.accuracy + '%');
+    setText('vrf-size-cov',  data.size ? data.size.coverage + '%' : '—');
+    setText('vrf-size-acc',  data.size ? data.size.accuracy  + '%' : '—');
+
+    // 방법별 바
+    const methodNames = { rule: 'Rule 매칭', rag: 'RAG 검색', llm: 'LLM 판단' };
+    const methodColors = { rule: '#f59e0b', rag: '#3b82f6', llm: '#8b5cf6' };
+    let barsHtml = '';
+    for (const [key, info] of Object.entries(data.methods || {})) {
+      const pct = info.accuracy;
+      barsHtml += `
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span style="font-weight:600;color:#1e293b">${methodNames[key]||key}</span>
+            <span style="color:#64748b">${fmt(info.match)}/${fmt(info.count)}건 · <strong style="color:${methodColors[key]||'#3b82f6'}">${pct}%</strong></span>
+          </div>
+          <div style="background:#f1f5f9;border-radius:6px;height:8px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${methodColors[key]||'#3b82f6'};border-radius:6px;transition:width 0.5s"></div>
+          </div>
+        </div>`;
+    }
+    document.getElementById('vrf-method-bars').innerHTML = barsHtml || '<div style="color:#94a3b8;font-size:12px">분류방법 컬럼 없음</div>';
+
+    // 불일치 목록
+    const mm = data.mismatches || [];
+    setText('vrf-mismatch-cnt', mm.length ? `(${fmt(mm.length)}건)` : '(없음)');
+    let mmHtml = '';
+    if (mm.length) {
+      mmHtml = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#f8fafc;color:#64748b">
+          <th style="padding:7px 10px;text-align:left;font-weight:600">규격</th>
+          <th style="padding:7px 10px;text-align:left;font-weight:600">시스템</th>
+          <th style="padding:7px 10px;text-align:left;font-weight:600">담당자</th>
+          <th style="padding:7px 10px;text-align:left;font-weight:600">방법</th>
+        </tr></thead><tbody>`;
+      mm.forEach((r, i) => {
+        const bg = i % 2 === 0 ? 'white' : '#fafbfd';
+        mmHtml += `<tr style="background:${bg};border-top:1px solid #f1f5f9">
+          <td style="padding:6px 10px;color:#334155;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.spec}</td>
+          <td style="padding:6px 10px;color:#dc2626;font-weight:500">${r.system}</td>
+          <td style="padding:6px 10px;color:#059669;font-weight:500">${r.human}</td>
+          <td style="padding:6px 10px;color:#94a3b8">${r.method}</td>
+        </tr>`;
+      });
+      mmHtml += '</tbody></table>';
+    } else {
+      mmHtml = '<div style="color:#059669;font-size:12px;padding:8px 0">불일치 항목 없음 🎉</div>';
+    }
+    document.getElementById('vrf-mismatch-list').innerHTML = mmHtml;
+
+    // LLM 패턴 분석
+    const la = data.llm_analysis;
+    let llmHtml = '';
+    if (la) {
+      llmHtml = `
+        <div style="display:flex;gap:16px;margin-bottom:14px">
+          <div style="flex:1;background:#fef3c7;border-radius:10px;padding:12px 16px;border:1px solid #fde68a">
+            <div style="font-size:22px;font-weight:800;color:#d97706">${la.answer_in_spec}</div>
+            <div style="font-size:11px;color:#92400e;margin-top:2px">규격에 정답 명시됨</div>
+          </div>
+          <div style="flex:1;background:#f8fafc;border-radius:10px;padding:12px 16px;border:1px solid #e2e8f0">
+            <div style="font-size:22px;font-weight:800;color:#1e3a5f">${la.total_mismatch}</div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px">LLM 전체 불일치</div>
+          </div>
+          <div style="flex:1;background:#eff6ff;border-radius:10px;padding:12px 16px;border:1px solid #bfdbfe">
+            <div style="font-size:22px;font-weight:800;color:#2563eb">${la.answer_in_spec_pct}%</div>
+            <div style="font-size:11px;color:#1e40af;margin-top:2px">프롬프트 개선 여지</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600">규격에 정답이 있는데 틀린 사례 (상위 20건)</div>
+        <div style="max-height:200px;overflow-y:auto">`;
+      la.examples.forEach((r, i) => {
+        const bg = i % 2 === 0 ? 'white' : '#fafbfd';
+        llmHtml += `<div style="background:${bg};border-top:1px solid #f1f5f9;padding:6px 10px;font-size:11.5px">
+          <div style="color:#334155;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.spec}</div>
+          <span style="color:#dc2626;font-weight:600">${r.system}</span>
+          <span style="color:#94a3b8;margin:0 6px">→</span>
+          <span style="color:#059669;font-weight:600">${r.human}</span>
+        </div>`;
+      });
+      llmHtml += '</div>';
+    } else {
+      llmHtml = '<div style="font-size:12px;color:#94a3b8">분류방법 컬럼 없음</div>';
+    }
+    document.getElementById('vrf-llm-analysis').innerHTML = llmHtml;
+
+    show('vrf-result');
+  } catch(e) {
+    alert('오류: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📈 분석 시작';
+  }
+}
+
+// ─────────────────────────────────────────────
+// 유틸
+// ─────────────────────────────────────────────
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function setWidth(id, pct) { const el = document.getElementById(id); if (el) el.style.width = pct + '%'; }
+function fmt(n) { return n ? n.toLocaleString() : '0'; }
+
+// 스텝 플로우 제어
+const STEP_NUMS  = { 'step-rule': '1', 'step-rag': '2', 'step-llm': '3', 'step-size': '4' };
+const STEP_LINES = { 'step-rule': 'sline-1', 'step-rag': 'sline-2', 'step-llm': 'sline-3' };
+
+function setStep(id, status, label) {
+  const circle  = document.getElementById(id);
+  const labelEl = document.getElementById(id + '-lbl');
+  if (!circle) return;
+  circle.className = 'step-circle ' + status;
+  circle.textContent = status === 'done' ? '✓' : (STEP_NUMS[id] || '●');
+  if (labelEl) {
+    labelEl.className = 'step-label ' + status;
+    if (label) labelEl.textContent = label;
+  }
+  if (status === 'done' && STEP_LINES[id]) {
+    const line = document.getElementById(STEP_LINES[id]);
+    if (line) line.classList.add('done');
+  }
+}
+
+const USTEP_LINES = { rag: 'usline-1', rule: 'usline-2' };
+const USTEP_NUMS  = { rag: '1', rule: '2', size: '3' };
+
+function setUStep(key, status) {
+  const id      = 'ustep-' + key;
+  const circle  = document.getElementById(id);
+  const labelEl = document.getElementById(id + '-lbl');
+  if (!circle) return;
+  circle.className = 'step-circle ' + status;
+  circle.textContent = status === 'done' ? '✓' : (USTEP_NUMS[key] || '●');
+  if (labelEl) labelEl.className = 'step-label ' + status;
+  if (status === 'done' && USTEP_LINES[key]) {
+    const line = document.getElementById(USTEP_LINES[key]);
+    if (line) line.classList.add('done');
+  }
+}
+
+function resetSteps() {
+  ['rule','rag','llm','size'].forEach((s, i) => {
+    setStep('step-' + s, 'wait');
+    const line = document.getElementById('sline-' + (i + 1));
+    if (line) line.classList.remove('done');
+  });
+}
+
+// SSE 연결
+function connectSSE(url, onEvent) {
+  const es = new EventSource(url);
+  es.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'ping') return;
+    onEvent(data);
+    if (data.type === 'done' || data.type === 'error') es.close();
+  };
+  es.onerror = () => es.close();
+  return es;
+}
+
+// ─────────────────────────────────────────────
+// 분류 실행
+// ─────────────────────────────────────────────
+async function startClassify() {
+  if (!clsFile) return;
+
+  hide('cls-idle-msg');
+  hide('cls-done-banner');
+  hide('cls-err-banner');
+  hide('cls-stat-grid');
+  hide('cls-method-card');
+  hide('cls-down-btn');
+  show('cls-progress-card');
+
+  document.getElementById('cls-start-btn').disabled = true;
+  setWidth('cls-prog-bar', 2);
+  setText('cls-prog-text', '파일 업로드 중...');
+  resetSteps();
+
+  const form = new FormData();
+  form.append('file',     clsFile);
+  form.append('use_rule', isOn('tog-cls-rule') ? 'true' : 'false');
+  form.append('use_rag',  isOn('tog-cls-rag')  ? 'true' : 'false');
+  form.append('use_llm',  isOn('tog-cls-llm')  ? 'true' : 'false');
+  form.append('use_size', isOn('tog-cls-size')  ? 'true' : 'false');
+
+  try {
+    const res = await fetch('/api/classify/start', { method: 'POST', body: form });
+    if (!res.ok) throw new Error(await res.text());
+    const { job_id } = await res.json();
+    clsJobId = job_id;
+    connectSSE('/api/classify/stream/' + job_id, handleClsEvent);
+  } catch (err) {
+    showClsError(err.message);
+  }
+}
+
+let clsRagTotal = 0, clsLlmTotal = 0;
+
+function handleClsEvent(data) {
+  const { type, step } = data;
+
+  if (type === 'start') {
+    setText('cls-prog-text', `총 ${fmt(data.total)}건 처리 시작`);
+    setWidth('cls-prog-bar', 3);
+
+  } else if (type === 'step') {
+    if (step === 'rule') {
+      setStep('step-rule', 'done', `Rule`);
+      setText('cls-prog-text', `[Rule] ${fmt(data.done)}건 분류 완료`);
+      setWidth('cls-prog-bar', 8);
+
+    } else if (step === 'rag_start') {
+      clsRagTotal = data.total;
+      setStep('step-rag', 'active', 'RAG 검색 중');
+      setText('cls-prog-text', `[RAG] 0 / ${fmt(data.total)}건 처리 중...`);
+
+    } else if (step === 'rag') {
+      const pct = clsRagTotal ? data.done / clsRagTotal : 0;
+      setStep('step-rag', 'active', `RAG ${fmt(data.done)}/${fmt(data.total)}`);
+      setText('cls-prog-text', `[RAG] ${fmt(data.done)} / ${fmt(data.total)}건 처리 중...`);
+      setWidth('cls-prog-bar', 8 + Math.round(pct * 72));
+
+    } else if (step === 'rag_done') {
+      setStep('step-rag', 'done', `RAG`);
+      setText('cls-prog-text', `[RAG] ${fmt(data.done)}건 분류 완료`);
+      setWidth('cls-prog-bar', 82);
+
+    } else if (step === 'llm') {
+      if (!clsLlmTotal) clsLlmTotal = data.total;
+      const pct = clsLlmTotal ? data.done / clsLlmTotal : 0;
+      setStep('step-llm', 'active', `LLM ${fmt(data.done)}/${fmt(data.total)}`);
+      setText('cls-prog-text', `[LLM] ${fmt(data.done)} / ${fmt(data.total)}건 처리 중...`);
+      setWidth('cls-prog-bar', 82 + Math.round(pct * 10));
+
+    } else if (step === 'llm_done') {
+      setStep('step-llm', 'done', `LLM`);
+      setText('cls-prog-text', `[LLM] ${fmt(data.done)}건 분류 완료`);
+      setWidth('cls-prog-bar', 92);
+
+    } else if (step === 'size_start') {
+      setStep('step-size', 'active', '사이즈 추출 중');
+      setText('cls-prog-text', `[사이즈] 추출 중...`);
+      setWidth('cls-prog-bar', 94);
+    }
+
+  } else if (type === 'done') {
+    showClsDone(data);
+  } else if (type === 'error') {
+    showClsError(data.message);
+  }
+}
+
+function showClsDone(data) {
+  ['rule','rag','llm','size'].forEach(s => {
+    const c = document.getElementById('step-' + s);
+    if (c && c.classList.contains('active')) setStep('step-' + s, 'done');
+  });
+  setWidth('cls-prog-bar', 100);
+  setText('cls-prog-text', '처리 완료!');
+
+  const mc = data.method_counts || {};
+  const total = data.total || 0;
+  const rule  = mc.rule  || 0;
+  const rag   = mc.rag   || 0;
+  const llm   = mc.llm   || 0;
+  const un    = mc.unclassified || 0;
+  const classified = rule + rag + llm;
+  const accPct = total ? (classified / total * 100).toFixed(1) : 0;
+
+  clsDownloadName = data.download_name || '분류결과.xlsx';
+
+  show('cls-stat-grid');
+  setText('st-total', fmt(total));
+  setText('st-acc',   accPct + '%');
+  setText('st-rule',  fmt(rule));
+  setText('st-rag',   fmt(rag));
+  setText('st-un',    fmt(un));
+
+  show('cls-method-card');
+  setWidth('cls-acc-fill', accPct);
+  setText('cls-acc-lbl',  `전체 분류율 ${accPct}%`);
+  setText('cls-acc-lbl2', `${fmt(classified)}건 분류`);
+
+  function setBar(sfx, cnt) {
+    const pct = total ? (cnt / total * 100) : 0;
+    setWidth('mb-' + sfx, Math.max(pct, cnt > 0 ? 3 : 0));
+    setText('mb-' + sfx, fmt(cnt));
+    setText('mc-' + sfx, fmt(cnt) + '건');
+  }
+  setBar('rule', rule); setBar('rag', rag); setBar('llm', llm); setBar('un', un);
+
+  show('cls-done-banner');
+  setText('cls-done-title', '분류 완료!');
+  setText('cls-done-sub', `${fmt(total)}건 처리 완료 · 분류율 ${accPct}%`);
+
+  show('cls-down-btn');
+  document.getElementById('cls-down-btn').textContent = `⬇ ${clsDownloadName} 다운로드`;
+  document.getElementById('cls-start-btn').disabled = false;
+  clsRagTotal = 0; clsLlmTotal = 0;
+}
+
+function showClsError(msg) {
+  show('cls-err-banner');
+  setText('cls-err-msg', msg);
+  document.getElementById('cls-start-btn').disabled = false;
+}
+
+function downloadResult() {
+  if (!clsJobId) return;
+  document.getElementById('cls-down-btn').disabled = true;
+  window.location.href = '/api/classify/download/' + clsJobId;
+  clsJobId = null;
+  hide('cls-down-btn');
+  hide('cls-stat-grid');
+  hide('cls-progress-card');
+  show('cls-idle-msg');
+  document.getElementById('cls-start-btn').disabled = true;
+  document.getElementById('cls-drop').classList.remove('has-file');
+  document.getElementById('cls-fname').textContent = '';
+  document.getElementById('cls-fname').style.display = 'none';
+  document.getElementById('cls-finfo').textContent = '';
+  document.getElementById('cls-finfo').style.display = 'none';
+  document.getElementById('cls-file-input').value = '';
+  clsFile = null;
+}
+
+// ─────────────────────────────────────────────
+// 데이터 갱신
+// ─────────────────────────────────────────────
+async function startUpdate() {
+  if (!updFile) return;
+
+  hide('upd-idle-msg');
+  hide('upd-done-banner');
+  hide('upd-err-banner');
+  hide('upd-result-card');
+  hide('upd-conflict-card');
+  show('upd-progress-card');
+
+  document.getElementById('upd-start-btn').disabled = true;
+  ['rag','rule','size'].forEach(s => setUStep(s, 'wait'));
+  ['usline-1','usline-2'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('done'); });
+  setText('upd-prog-text', '파일 업로드 중...');
+  setWidth('upd-prog-bar', 2);
+
+  const form = new FormData();
+  form.append('file',        updFile);
+  form.append('do_rag',      isOn('tog-upd-rag')  ? 'true' : 'false');
+  form.append('do_rulebase', isOn('tog-upd-rule') ? 'true' : 'false');
+  form.append('do_size',     isOn('tog-upd-size') ? 'true' : 'false');
+
+  try {
+    const res = await fetch('/api/update/start', { method: 'POST', body: form });
+    if (!res.ok) throw new Error(await res.text());
+    const { job_id } = await res.json();
+    updJobId = job_id;
+    connectSSE('/api/update/stream/' + job_id, handleUpdEvent);
+  } catch (err) {
+    showUpdError(err.message);
+  }
+}
+
+let updSummary = {};
+
+function handleUpdEvent(data) {
+  const type = data.type;
+
+  if (type === 'start') {
+    setText('upd-prog-text', `총 ${fmt(data.total)}건 처리 시작`);
+    setWidth('upd-prog-bar', 5);
+
+  } else if (type === 'rag_start') {
+    setUStep('rag', 'active');
+    setText('upd-prog-text', 'RAG 유사사례 DB 갱신 중...');
+
+  } else if (type === 'rag_progress') {
+    const pct = data.total ? data.done / data.total : 0;
+    setText('upd-prog-text', `[RAG] ${fmt(data.done)} / ${fmt(data.total)}건 처리 중...`);
+    setWidth('upd-prog-bar', 5 + Math.round(pct * 50));
+
+  } else if (type === 'rag_done') {
+    setUStep('rag', 'done');
+    updSummary.rag = data;
+    setText('upd-prog-text', `[RAG] ${fmt(data.added)}건 추가 완료`);
+    setWidth('upd-prog-bar', 55);
+
+  } else if (type === 'rulebase_start') {
+    setUStep('rule', 'active');
+    setText('upd-prog-text', '룰베이스 패턴 분석 중...');
+
+  } else if (type === 'rulebase_done') {
+    setUStep('rule', 'done');
+    updSummary.rulebase = data;
+    setText('upd-prog-text', `[룰베이스] ${fmt(data.inserted)}개 추가, 충돌 ${data.conflicts}건`);
+    setWidth('upd-prog-bar', 80);
+
+  } else if (type === 'size_start') {
+    setUStep('size', 'active');
+    setText('upd-prog-text', '사이즈 사전 갱신 중...');
+
+  } else if (type === 'size_done') {
+    setUStep('size', 'done');
+    updSummary.size = data;
+    setText('upd-prog-text', `[사이즈] ${fmt(data.added)}건 추가 완료`);
+    setWidth('upd-prog-bar', 95);
+
+  } else if (type === 'done') {
+    showUpdDone(data);
+  } else if (type === 'error') {
+    showUpdError(data.message);
+  }
+}
+
+function showUpdDone(data) {
+  setWidth('upd-prog-bar', 100);
+  setText('upd-prog-text', '갱신 완료!');
+
+  const conflictCount = data.conflicts || 0;
+  show('upd-done-banner');
+  setText('upd-done-sub', `갱신 완료 · 충돌 ${conflictCount}건${conflictCount > 0 ? ' 검토 필요' : ''}`);
+
+  show('upd-result-card');
+  const s = updSummary;
+  let html = '';
+  if (s.rag)      html += resItem('✅', 'RAG 유사사례 추가', `신규 ${fmt(s.rag.added)}건 · ${fmt(s.rag.skipped)}건 스킵`, `+${fmt(s.rag.added)}건`);
+  if (s.rulebase) html += resItem(s.rulebase.conflicts > 0 ? '⚠️' : '✅', '룰베이스 갱신', `신규 패턴 ${s.rulebase.inserted}개 · 충돌 ${s.rulebase.conflicts}건`, `+${s.rulebase.inserted}개`);
+  if (s.size)     html += resItem('✅', '사이즈 사전 갱신', `신규 ${fmt(s.size.added)}건 추가`, `+${fmt(s.size.added)}건`);
+  document.getElementById('upd-result-body').innerHTML = html;
+
+  if (conflictCount > 0) {
+    show('upd-conflict-card');
+    setText('upd-conflict-badge', `검토 필요 ${conflictCount}건`);
+    loadConflicts();
+  }
+  document.getElementById('upd-start-btn').disabled = false;
+  updSummary = {};
+}
+
+function resItem(ico, title, detail, cnt) {
+  return `<div class="res-item"><div class="res-ico">${ico}</div><div><div class="res-title">${title}</div><div class="res-detail">${detail}</div></div><div class="res-cnt">${cnt}</div></div>`;
+}
+
+function showUpdError(msg) {
+  show('upd-err-banner');
+  setText('upd-err-msg', msg);
+  document.getElementById('upd-start-btn').disabled = false;
+}
+
+async function loadConflicts() {
+  if (!updJobId) return;
+  const res = await fetch('/api/update/conflicts/' + updJobId);
+  const { conflicts } = await res.json();
+  renderConflicts(conflicts);
+}
+
+function renderConflicts(conflicts) {
+  const list = document.getElementById('upd-conflict-list');
+  list.innerHTML = conflicts.map((c, i) => {
+    const resolved   = c.resolved;
+    const applyClass = resolved === 'applied' ? 'cbtn-applied' : 'cbtn-apply';
+    const skipClass  = resolved === 'skipped'  ? 'cbtn-skipped'  : 'cbtn-skip';
+    const applyTxt   = resolved === 'applied' ? '✓ 적용됨' : '✓ 신규로 적용';
+    const skipTxt    = resolved === 'skipped'  ? '✗ 무시됨' : '✗ 무시';
+    const disabled   = resolved ? 'disabled' : '';
+    return `
+      <div class="conflict-box" id="conflict-${i}">
+        <div class="conflict-pattern">${c.pattern}</div>
+        <div class="conflict-grade">기존 강종: <span style="color:#ef4444;font-weight:700">${c.existing_grade}</span></div>
+        <div class="conflict-grade">신규 강종: <span style="color:#10b981;font-weight:700">${c.new_grade}</span> <span style="color:#94a3b8">(일관성 ${c.consistency}%, ${c.count}건)</span></div>
+        <div class="conflict-btns">
+          <button class="cbtn ${applyClass}" onclick="resolveConflict(${i},'apply')" ${disabled}>${applyTxt}</button>
+          <button class="cbtn ${skipClass}"  onclick="resolveConflict(${i},'skip')"  ${disabled}>${skipTxt}</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function resolveConflict(idx, action) {
+  if (!updJobId) return;
+  const res = await fetch(`/api/update/conflicts/${updJobId}/${idx}/${action}`, { method: 'POST' });
+  if (!res.ok) { alert('처리 중 오류가 발생했습니다.'); return; }
+  await loadConflicts();
+}
+</script>
+</body>
+</html>

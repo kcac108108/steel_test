@@ -49,7 +49,7 @@ class SteelClassifier:
         # 4단계: 미분류
         return ClassifyResult(spec_text=spec_text, method=ClassifyMethod.UNCLASSIFIED)
 
-    def classify_batch(self, spec_texts: list[str], checkpoint_path: str = "") -> list[ClassifyResult]:
+    def classify_batch(self, spec_texts: list[str], checkpoint_path: str = "", progress_cb=None) -> list[ClassifyResult]:
         """배치 분류 - Rule 먼저, RAG는 500건씩, LLM은 미분류 건만 처리"""
         total = len(spec_texts)
         results: list[ClassifyResult] = [
@@ -67,6 +67,8 @@ class SteelClassifier:
                         results[i] = rule_result
             rule_classified = sum(1 for r in results if r.method == ClassifyMethod.RULE)
             print(f"  [RULE] {rule_classified:,}건 분류 완료")
+            if progress_cb:
+                progress_cb({"type": "step", "step": "rule", "done": rule_classified, "total": total})
 
         # 2단계: RAG 배치 검색 - Rule 미분류 건만
         hints_map: dict[int, list[dict]] = {}
@@ -77,7 +79,14 @@ class SteelClassifier:
             ]
             rag_texts = [spec_texts[i] for i in rag_indices]
             print(f"  [RAG] {len(rag_texts):,}건 배치 검색 시작...")
-            rag_with_hints = self._rag.search_batch_with_hints(rag_texts)
+            if progress_cb:
+                progress_cb({"type": "step", "step": "rag_start", "done": 0, "total": len(rag_texts)})
+
+            def _rag_cb(e):
+                if progress_cb:
+                    progress_cb({"type": "step", "step": "rag", "done": e["done"], "total": e["total"]})
+
+            rag_with_hints = self._rag.search_batch_with_hints(rag_texts, progress_cb=_rag_cb)
             for idx, (rag_result, hints) in zip(rag_indices, rag_with_hints):
                 if rag_result:
                     results[idx] = rag_result
@@ -85,6 +94,8 @@ class SteelClassifier:
                     hints_map[idx] = hints
             rag_classified = sum(1 for r in results if r.method == ClassifyMethod.RAG)
             print(f"  [RAG] {rag_classified:,}건 분류 완료")
+            if progress_cb:
+                progress_cb({"type": "step", "step": "rag_done", "done": rag_classified, "total": total})
 
         # 3단계: LLM - RAG 미분류 건만 병렬 처리
         if self._llm:
@@ -118,6 +129,8 @@ class SteelClassifier:
                 if count % 100 == 0:
                     done_so_far = len(checkpoint_saved) + count
                     print(f"  [LLM] [{done_so_far:,}/{llm_total:,}] 처리 중...")
+                    if progress_cb:
+                        progress_cb({"type": "step", "step": "llm", "done": done_so_far, "total": llm_total})
                     if checkpoint_path:
                         tmp_path = checkpoint_path + ".tmp"
                         with open(tmp_path, "wb") as f:
@@ -126,6 +139,8 @@ class SteelClassifier:
 
             llm_classified = sum(1 for r in results if r.method == ClassifyMethod.LLM)
             print(f"  [LLM] {llm_classified:,}건 분류 완료")
+            if progress_cb:
+                progress_cb({"type": "step", "step": "llm_done", "done": llm_classified, "total": total})
 
         return results
 
