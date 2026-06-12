@@ -1034,7 +1034,14 @@ function showUpdDone(data) {
   if (s.size)     html += resItem('✅', '사이즈 사전 갱신', `신규 ${fmt(s.size.added)}건 추가`, `+${fmt(s.size.added)}건`);
   document.getElementById('upd-result-body').innerHTML = html;
 
-  document.getElementById('upd-start-btn').disabled = false;
+  document.getElementById('upd-start-btn').disabled = true;
+  document.getElementById('upd-drop').classList.remove('has-file');
+  document.getElementById('upd-fname').textContent = '';
+  document.getElementById('upd-fname').style.display = 'none';
+  document.getElementById('upd-finfo').textContent = '';
+  document.getElementById('upd-finfo').style.display = 'none';
+  document.getElementById('upd-file-input').value = '';
+  updFile = null;
   updSummary = {};
 }
 
