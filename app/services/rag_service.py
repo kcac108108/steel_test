@@ -97,7 +97,7 @@ class RAGService:
         )
         return [item.embedding for item in resp.data]
 
-    def index_history(self, records: list[HistoryRecord], insert_only: bool = False, batch_size: int = 500) -> None:
+    def index_history(self, records: list[HistoryRecord], insert_only: bool = False, batch_size: int = 500, progress_cb=None) -> dict:
         """분류 이력 데이터를 ChromaDB에 인덱싱
 
         insert_only=True: 이미 존재하는 규격은 덮어쓰지 않음 (신규만 추가)
@@ -105,6 +105,7 @@ class RAGService:
         """
         total = len(records)
         skipped = 0
+        added = 0
         for i in range(0, total, batch_size):
             batch = records[i : i + batch_size]
 
@@ -124,6 +125,8 @@ class RAGService:
                 if not new_indices:
                     skipped += len(deduped)
                     print(f"  [{i + len(batch):,}/{total:,}] 진행 중... (신규 0건, 전체 스킵)")
+                    if progress_cb:
+                        progress_cb({"type": "rag_progress", "done": min(i + len(batch), total), "total": total, "added": added, "skipped": skipped})
                     continue
                 texts = [texts[k] for k in new_indices]
                 ids = [ids[k] for k in new_indices]
@@ -141,8 +144,12 @@ class RAGService:
                 documents=texts,
                 metadatas=metadatas,
             )
+            added += len(ids)
             print(f"  [{i + len(batch):,}/{total:,}] 진행 중..." + (f" (기존 {skipped}건 스킵)" if insert_only and skipped else ""))
+            if progress_cb:
+                progress_cb({"type": "rag_progress", "done": min(i + len(batch), total), "total": total, "added": added, "skipped": skipped})
         print(f"[RAG] {total:,}건 인덱싱 완료" + (f" (기존 존재로 스킵: {skipped}건)" if insert_only else ""))
+        return {"total": total, "added": added, "skipped": skipped}
 
     def search(self, spec_text: str) -> Optional[ClassifyResult]:
         """단건 유사도 검색"""
@@ -155,6 +162,7 @@ class RAGService:
         n_hints: int = 3,
         min_hint_sim: float = 0.70,
         batch_size: int = 500,
+        progress_cb=None,
     ) -> list[tuple[Optional["ClassifyResult"], list[dict]]]:
         """배치 검색 + LLM 힌트 동시 반환 (임베딩 1회 호출로 처리)
         Returns: list of (ClassifyResult | None, [{grade, similarity}, ...])
@@ -240,6 +248,8 @@ class RAGService:
                 batch_results[j] = (classify_result, hints)
 
             all_results.extend(batch_results)
+            if progress_cb:
+                progress_cb({"type": "step", "step": "rag", "done": min(i + batch_size, len(spec_texts)), "total": len(spec_texts)})
 
         return all_results
 

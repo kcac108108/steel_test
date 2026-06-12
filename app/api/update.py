@@ -50,9 +50,9 @@ async def start_update(
 ):
     job_id = uuid.uuid4().hex[:8]
     _queues[job_id] = queue.Queue()
-    _jobs[job_id] = {"status": "running", "conflicts": []}
+    _jobs[job_id] = {"status": "running"}
 
-    # 확정 데이터는 confirmed/ 폴더에 영구 저장
+    # 확정 데이터는 confirmed/ 폴더에 영구 저장 (동일 파일명 덮어쓰기)
     confirmed_dir = Path("confirmed")
     confirmed_dir.mkdir(exist_ok=True)
     save_path = str(confirmed_dir / file.filename)
@@ -111,7 +111,7 @@ async def start_update(
                     _emit(job_id, e)
 
                 rag = RAGService()
-                stats = rag.index_history(records, insert_only=False, progress_cb=rag_progress)
+                stats = rag.index_history(records, insert_only=True, progress_cb=rag_progress)
                 summary["rag"] = stats
                 _emit(job_id, {"type": "rag_done", "added": stats["added"], "skipped": stats["skipped"], "total": stats["total"]})
 
@@ -122,7 +122,6 @@ async def start_update(
                 df_rule["model_pattern"] = df_rule["규격"].apply(_extract_model_pattern)
                 df_rule = df_rule[df_rule["model_pattern"].notna()]
 
-                conflicts = []
                 inserted = 0
 
                 if not df_rule.empty:
@@ -148,24 +147,11 @@ async def start_update(
                         )
                         cursor = conn.cursor()
 
-                        # 기존 패턴 조회
-                        cursor.execute("SELECT UPPER(pattern), steel_grade FROM rule_base")
-                        existing = {row[0]: row[1] for row in cursor.fetchall()}
+                        # 기존 패턴 조회 (신규만 INSERT, 기존은 스킵)
+                        cursor.execute("SELECT UPPER(pattern) FROM rule_base")
+                        existing = {row[0] for row in cursor.fetchall()}
 
-                        # 충돌 감지
-                        for _, r in consistent_df.iterrows():
-                            pu = r["pattern"].upper()
-                            if pu in existing and existing[pu] != r["best_grade"]:
-                                conflicts.append({
-                                    "pattern": r["pattern"],
-                                    "existing_grade": existing[pu],
-                                    "new_grade": r["best_grade"],
-                                    "consistency": r["consistency"],
-                                    "count": r["total"],
-                                    "resolved": None,
-                                })
-
-                        # 신규 패턴 INSERT
+                        # 신규 패턴만 INSERT
                         to_insert = consistent_df[
                             (~consistent_df["pattern"].str.upper().isin(existing)) &
                             (consistent_df["pattern"].str.len() >= MIN_PATTERN_LEN)
@@ -191,9 +177,8 @@ async def start_update(
                         cursor.close()
                         conn.close()
 
-                _jobs[job_id]["conflicts"] = conflicts
-                summary["rulebase"] = {"inserted": inserted, "conflicts": len(conflicts)}
-                _emit(job_id, {"type": "rulebase_done", "inserted": inserted, "conflicts": len(conflicts)})
+                summary["rulebase"] = {"inserted": inserted}
+                _emit(job_id, {"type": "rulebase_done", "inserted": inserted})
 
             # ③ 사이즈 사전 갱신
             if flag_size:
@@ -223,7 +208,7 @@ async def start_update(
 
             _jobs[job_id]["status"] = "done"
             _jobs[job_id]["summary"] = summary
-            _emit(job_id, {"type": "done", "summary": summary, "conflicts": len(_jobs[job_id]["conflicts"])})
+            _emit(job_id, {"type": "done", "summary": summary})
 
         except Exception as e:
             _jobs[job_id]["status"] = "error"
@@ -265,53 +250,3 @@ async def stream_progress(job_id: str):
     )
 
 
-@router.get("/conflicts/{job_id}")
-async def get_conflicts(job_id: str):
-    job = _jobs.get(job_id)
-    if not job:
-        raise HTTPException(404, "작업을 찾을 수 없습니다.")
-    return {"conflicts": job.get("conflicts", [])}
-
-
-@router.post("/conflicts/{job_id}/{idx}/apply")
-async def apply_conflict(job_id: str, idx: int):
-    job = _jobs.get(job_id)
-    if not job:
-        raise HTTPException(404)
-    conflicts = job.get("conflicts", [])
-    if idx >= len(conflicts):
-        raise HTTPException(404, "충돌 항목을 찾을 수 없습니다.")
-
-    conflict = conflicts[idx]
-    try:
-        import oracledb
-        from app.core.config import settings
-        conn = oracledb.connect(
-            user=settings.oracle_user,
-            password=settings.oracle_password,
-            dsn=settings.oracle_dsn,
-        )
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE rule_base SET steel_grade = :1 WHERE UPPER(pattern) = UPPER(:2)",
-            [conflict["new_grade"], conflict["pattern"]],
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
-        conflicts[idx]["resolved"] = "applied"
-        return {"ok": True, "action": "applied"}
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-@router.post("/conflicts/{job_id}/{idx}/skip")
-async def skip_conflict(job_id: str, idx: int):
-    job = _jobs.get(job_id)
-    if not job:
-        raise HTTPException(404)
-    conflicts = job.get("conflicts", [])
-    if idx >= len(conflicts):
-        raise HTTPException(404)
-    conflicts[idx]["resolved"] = "skipped"
-    return {"ok": True, "action": "skipped"}

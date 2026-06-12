@@ -169,19 +169,6 @@ body { font-family: 'Malgun Gothic', sans-serif; background: #ffffff; color: #1e
 .res-detail { font-size: 11px; color: #94a3b8; margin-top: 2px; }
 .res-cnt    { font-size: 16px; font-weight: 800; color: #0f2744; white-space: nowrap; margin-left: auto; }
 
-.conflict-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
-.conflict-box:last-child { margin-bottom: 0; }
-.conflict-pattern { font-size: 13px; font-weight: 600; margin-bottom: 7px; color: #0f172a; }
-.conflict-grade   { font-size: 12px; color: #64748b; margin-bottom: 2px; }
-.conflict-btns    { display: flex; gap: 8px; margin-top: 10px; }
-.cbtn { flex: 1; padding: 8px; border: none; border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 600; font-family: 'Malgun Gothic', sans-serif; transition: all 0.15s; }
-.cbtn:disabled    { opacity: 0.45; cursor: not-allowed; }
-.cbtn-apply   { background: #d1fae5; color: #065f46; }
-.cbtn-apply:not(:disabled):hover { background: #10b981; color: white; }
-.cbtn-skip    { background: #f1f5f9; color: #64748b; }
-.cbtn-skip:not(:disabled):hover  { background: #e2e8f0; }
-.cbtn-applied { background: #d1fae5; color: #10b981; }
-.cbtn-skipped { background: #f1f5f9; color: #94a3b8; }
 
 .hidden { display: none !important; }
 </style>
@@ -413,7 +400,6 @@ body { font-family: 'Malgun Gothic', sans-serif; background: #ffffff; color: #1e
             </div>
           </div>
 
-          <div class="warn-box">⚠ 룰베이스 충돌은 오른쪽 화면에서 검토 후 적용하세요.</div>
           <button class="btn btn-navy" id="upd-start-btn" onclick="startUpdate()" disabled>🔄 갱신 실행</button>
         </div>
 
@@ -427,7 +413,7 @@ body { font-family: 'Malgun Gothic', sans-serif; background: #ffffff; color: #1e
           </div>
 
           <!-- 진행 카드 -->
-          <div id="upd-progress-card" class="card hidden">
+          <div id="upd-progress-card" class="card match-height hidden">
             <div class="card-title">진행 상황</div>
             <div class="step-flow">
               <div class="step-node">
@@ -473,12 +459,6 @@ body { font-family: 'Malgun Gothic', sans-serif; background: #ffffff; color: #1e
             <div id="upd-result-body"></div>
           </div>
 
-          <!-- 충돌 검토 -->
-          <div id="upd-conflict-card" class="card hidden">
-            <div class="card-title">룰베이스 충돌 검토 <span class="badge badge-o" id="upd-conflict-badge">—</span></div>
-            <div style="font-size:12px;color:#94a3b8;margin-bottom:12px">기존 강종과 달라 자동 적용되지 않은 패턴입니다.</div>
-            <div id="upd-conflict-list"></div>
-          </div>
 
         </div>
       </div>
@@ -963,7 +943,6 @@ async function startUpdate() {
   hide('upd-done-banner');
   hide('upd-err-banner');
   hide('upd-result-card');
-  hide('upd-conflict-card');
   show('upd-progress-card');
 
   document.getElementById('upd-start-btn').disabled = true;
@@ -1044,23 +1023,17 @@ function showUpdDone(data) {
   setWidth('upd-prog-bar', 100);
   setText('upd-prog-text', '갱신 완료!');
 
-  const conflictCount = data.conflicts || 0;
   show('upd-done-banner');
-  setText('upd-done-sub', `갱신 완료 · 충돌 ${conflictCount}건${conflictCount > 0 ? ' 검토 필요' : ''}`);
+  setText('upd-done-sub', '갱신 완료');
 
   show('upd-result-card');
   const s = updSummary;
   let html = '';
   if (s.rag)      html += resItem('✅', 'RAG 유사사례 추가', `신규 ${fmt(s.rag.added)}건 · ${fmt(s.rag.skipped)}건 스킵`, `+${fmt(s.rag.added)}건`);
-  if (s.rulebase) html += resItem(s.rulebase.conflicts > 0 ? '⚠️' : '✅', '룰베이스 갱신', `신규 패턴 ${s.rulebase.inserted}개 · 충돌 ${s.rulebase.conflicts}건`, `+${s.rulebase.inserted}개`);
+  if (s.rulebase) html += resItem('✅', '룰베이스 갱신', `신규 패턴 ${s.rulebase.inserted}개`, `+${s.rulebase.inserted}개`);
   if (s.size)     html += resItem('✅', '사이즈 사전 갱신', `신규 ${fmt(s.size.added)}건 추가`, `+${fmt(s.size.added)}건`);
   document.getElementById('upd-result-body').innerHTML = html;
 
-  if (conflictCount > 0) {
-    show('upd-conflict-card');
-    setText('upd-conflict-badge', `검토 필요 ${conflictCount}건`);
-    loadConflicts();
-  }
   document.getElementById('upd-start-btn').disabled = false;
   updSummary = {};
 }
@@ -1075,41 +1048,6 @@ function showUpdError(msg) {
   document.getElementById('upd-start-btn').disabled = false;
 }
 
-async function loadConflicts() {
-  if (!updJobId) return;
-  const res = await fetch('/api/update/conflicts/' + updJobId);
-  const { conflicts } = await res.json();
-  renderConflicts(conflicts);
-}
-
-function renderConflicts(conflicts) {
-  const list = document.getElementById('upd-conflict-list');
-  list.innerHTML = conflicts.map((c, i) => {
-    const resolved   = c.resolved;
-    const applyClass = resolved === 'applied' ? 'cbtn-applied' : 'cbtn-apply';
-    const skipClass  = resolved === 'skipped'  ? 'cbtn-skipped'  : 'cbtn-skip';
-    const applyTxt   = resolved === 'applied' ? '✓ 적용됨' : '✓ 신규로 적용';
-    const skipTxt    = resolved === 'skipped'  ? '✗ 무시됨' : '✗ 무시';
-    const disabled   = resolved ? 'disabled' : '';
-    return `
-      <div class="conflict-box" id="conflict-${i}">
-        <div class="conflict-pattern">${c.pattern}</div>
-        <div class="conflict-grade">기존 강종: <span style="color:#ef4444;font-weight:700">${c.existing_grade}</span></div>
-        <div class="conflict-grade">신규 강종: <span style="color:#10b981;font-weight:700">${c.new_grade}</span> <span style="color:#94a3b8">(일관성 ${c.consistency}%, ${c.count}건)</span></div>
-        <div class="conflict-btns">
-          <button class="cbtn ${applyClass}" onclick="resolveConflict(${i},'apply')" ${disabled}>${applyTxt}</button>
-          <button class="cbtn ${skipClass}"  onclick="resolveConflict(${i},'skip')"  ${disabled}>${skipTxt}</button>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-async function resolveConflict(idx, action) {
-  if (!updJobId) return;
-  const res = await fetch(`/api/update/conflicts/${updJobId}/${idx}/${action}`, { method: 'POST' });
-  if (!res.ok) { alert('처리 중 오류가 발생했습니다.'); return; }
-  await loadConflicts();
-}
 </script>
 </body>
 </html>

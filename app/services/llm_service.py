@@ -71,6 +71,8 @@ def _build_system_prompt(grade_list: list[str]) -> str:
 - ASTM 코드 명시 → "ASTM 코드 강종명" 형식으로 반환
   예) "ASTM A240, 304/304L" 명시 → steel_grade: "ASTM A240 304/304L"
   예) "ASTM A513" 명시 → steel_grade: "ASTM A513"
+  주의) ASTM 코드 뒤에 "CARBON STEEL", "STAINLESS STEEL", "ALLOY STEEL" 등 재질 설명어는 붙이지 마세요.
+  예) "ASTM A1011 CARBON STEEL SHEET..." → steel_grade: "ASTM A1011" (재질 설명 제거)
 
 - ASME 코드 명시 → "ASME 코드" 형식으로 반환
   예) "SA789 UNS S31803" 명시 → steel_grade: "ASME SA789 UNS S31803"
@@ -85,9 +87,20 @@ def _build_system_prompt(grade_list: list[str]) -> str:
   예) STK490 → steel_grade: "JIS G3444 STK 490"
   예) SPCC → steel_grade: "JIS G3141 SPCC"
   예) SGCH → steel_grade: "JIS G3302 SGCH"
+  예) SWRCH10A → steel_grade: "JIS G3507 SWRCH10A"
 
 - UNS 번호 명시 → UNS 번호를 강종으로 반환
   예) "UNS S31803" 명시 → steel_grade: "UNS S31803"
+
+- AISI와 ASTM이 동시에 명시된 경우 → AISI를 우선 선택
+  예) "AISI 1045, ASTM A108" 명시 → steel_grade: "AISI 1045"
+
+- 트레이드명(상품명)이 명시된 경우 → UNS/ASTM 번호로 변환하지 말고 트레이드명 그대로 반환
+  예) "AL6XN" 명시 → steel_grade: "AL6XN" (UNS N08367로 변환 금지)
+  예) "INCONEL 625" 명시 → steel_grade: "INCONEL 625" (UNS N06625로 변환 금지)
+
+- STS/KS 강종에 접미사(-T, -T2 등)가 명시된 경우 → 접미사 포함하여 반환
+  예) "STS416-T" 명시 → steel_grade: "STS416-T" (STS416으로 축약 금지)
 
 [선급강 구분 기준 - 매우 중요]
 아래 선급강은 텍스트만으로 구분이 어려우므로 반드시 다음 기준을 따르세요:
