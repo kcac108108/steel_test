@@ -142,7 +142,7 @@ class LLMService:
         grade_list = _load_grade_list()
         self._system_prompt = _build_system_prompt(grade_list)
 
-    def classify(self, spec_text: str, rag_hints: list[dict] | None = None) -> Optional[ClassifyResult]:
+    def classify(self, spec_text: str, rag_hints: Optional[list] = None) -> Optional[ClassifyResult]:
         """
         GPT로 강종/사이즈 분류 시도.
         rag_hints: [{"grade": ..., "similarity": ...}, ...] — RAG 유사 후보 힌트

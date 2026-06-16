@@ -83,15 +83,15 @@ async def start_classify(
                 s = str(v).strip() if v else ""
                 return "" if s in ("", "0", "0.0", "None", "nan") else s
 
-            df["강종_RAG"] = [clean(r.steel_grade) for r in results]
-            df["분류방법"] = [r.method.value for r in results]
+            df["시스템_강종"] = [clean(r.steel_grade) for r in results]
+            df["강종_분류방법"] = [r.method.value for r in results]
 
             if flag_size:
                 _emit(job_id, {"type": "step", "step": "size_start", "done": 0, "total": total})
                 size_extractor = SizeExtractor()
                 size_results = size_extractor.extract_batch(spec_texts)
-                df["사이즈_RAG"] = [clean(size) for size, _ in size_results]
-                df["사이즈_방법"] = [method for _, method in size_results]
+                df["시스템_사이즈"] = [clean(size) for size, _ in size_results]
+                df["사이즈_분류방법"] = [method for _, method in size_results]
             else:
                 size_results = [("", "skipped")] * total
 

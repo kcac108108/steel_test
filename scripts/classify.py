@@ -53,16 +53,16 @@ def run_classify(input_path: str, output_path: str, use_llm: bool, use_rule: boo
     classifier = SteelClassifier(use_rule=use_rule, use_rag=True, use_llm=use_llm)
     results = classifier.classify_batch(spec_texts, checkpoint_path=checkpoint_path)
 
-    df["강종_RAG"] = [clean(r.steel_grade) for r in results]
-    df["분류방법"] = [r.method.value for r in results]
+    df["시스템_강종"] = [clean(r.steel_grade) for r in results]
+    df["강종_분류방법"] = [r.method.value for r in results]
 
     # 사이즈 추출 (정확매칭 → 정규식 → LLM)
     if use_size:
         print("\n[사이즈 추출 시작]")
         size_extractor = SizeExtractor()
         size_results = size_extractor.extract_batch(spec_texts)
-        df["사이즈_RAG"] = [clean(size) for size, _ in size_results]
-        df["사이즈_방법"] = [method for _, method in size_results]
+        df["시스템_사이즈"] = [clean(size) for size, _ in size_results]
+        df["사이즈_분류방법"] = [method for _, method in size_results]
     else:
         print("\n[사이즈 추출 스킵]")
         size_results = [("", "skipped")] * len(spec_texts)

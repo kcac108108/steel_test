@@ -27,13 +27,15 @@ async def analyze(file: UploadFile = File(...)):
         finally:
             os.unlink(tmp_path)
 
-        required = {"규격", "강종_RAG", "강종"}
+        required = {"규격", "시스템_강종"}
         missing = required - set(df.columns)
         if missing:
             raise HTTPException(400, f"필수 컬럼 없음: {', '.join(missing)}")
 
-        has_size = {"사이즈_RAG", "사이즈"}.issubset(df.columns)
-        has_method = "분류방법" in df.columns
+        has_size = "시스템_사이즈" in df.columns
+        has_hum_grade = "강종" in df.columns
+        has_hum_size = "사이즈" in df.columns
+        has_method = "강종_분류방법" in df.columns
 
         total = len(df)
 
@@ -41,10 +43,10 @@ async def analyze(file: UploadFile = File(...)):
             s = str(s).strip() if s and str(s) not in ("nan", "None", "") else ""
             return s
 
-        df["_sys_grade"]  = df["강종_RAG"].apply(clean)
-        df["_hum_grade"]  = df["강종"].apply(clean)
+        df["_sys_grade"]  = df["시스템_강종"].apply(clean)
+        df["_hum_grade"]  = df["강종"].apply(clean) if has_hum_grade else ""
         if has_method:
-            df["_method"] = df["분류방법"].apply(lambda s: clean(s).lower())
+            df["_method"] = df["강종_분류방법"].apply(lambda s: clean(s).lower())
 
         # 강종 커버리지: 시스템이 분류한 건수
         grade_covered = (df["_sys_grade"] != "").sum()
@@ -71,8 +73,8 @@ async def analyze(file: UploadFile = File(...)):
         # 사이즈
         size_stats = None
         if has_size:
-            df["_sys_size"] = df["사이즈_RAG"].apply(clean)
-            df["_hum_size"] = df["사이즈"].apply(clean)
+            df["_sys_size"] = df["시스템_사이즈"].apply(clean)
+            df["_hum_size"] = df["사이즈"].apply(clean) if has_hum_size else ""
             size_covered = (df["_sys_size"] != "").sum()
             size_coverage = round(size_covered / total * 100, 1) if total else 0
             size_base = df[(df["_sys_size"] != "") & (df["_hum_size"] != "")]
@@ -124,7 +126,7 @@ async def analyze(file: UploadFile = File(...)):
                 "spec":   row["규격"],
                 "system": row["_sys_grade"],
                 "human":  row["_hum_grade"],
-                "method": clean(row.get("분류방법", "")),
+                "method": clean(row.get("강종_분류방법", "")),
             }
             for _, row in all_mismatch_df.head(100).iterrows()
         ]

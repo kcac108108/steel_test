@@ -4,10 +4,13 @@ __pycache__/
 *.pyo
 .env
 chroma_db/
+chroma_db_backup/
+rulebase_backup/
+confirmed/
 data/raw/
 *.xlsx
 *.csv
+*.pkl
 .DS_Store
 input/
 output/
-biff/

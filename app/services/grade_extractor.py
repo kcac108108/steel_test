@@ -13,13 +13,14 @@ Rule/RAG/LLM이 분류한 강종을 규격 텍스트와 비교하여 검증·보
 import re
 import pickle
 import os
+from typing import Optional
 from pathlib import Path
 
 import pandas as pd
 
 
-_GRADE_VOCAB: list[str] | None = None
-_GRADE_VOCAB_UPPER: list[tuple[str, str]] | None = None  # (upper, original) pairs
+_GRADE_VOCAB: Optional[list] = None
+_GRADE_VOCAB_UPPER: Optional[list] = None  # (upper, original) pairs
 _VOCAB_CACHE_PATH = "grade_vocab.pkl"
 
 
