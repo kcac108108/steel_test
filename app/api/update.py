@@ -158,10 +158,12 @@ async def start_update(
                         ]
 
                         if not to_insert.empty:
-                            cursor.execute("SELECT MAX(rule_id) FROM rule_base")
-                            max_id = cursor.fetchone()[0] or "MC000000"
-                            prefix = "".join(c for c in max_id if c.isalpha()) or "MC"
-                            max_num = int("".join(c for c in max_id if c.isdigit()) or "0")
+                            cursor.execute(
+                                "SELECT NVL(MAX(TO_NUMBER(REGEXP_SUBSTR(rule_id, '[0-9]+'))), 0) "
+                                "FROM rule_base WHERE REGEXP_LIKE(rule_id, '^[A-Z]+[0-9]+$')"
+                            )
+                            max_num = int(cursor.fetchone()[0] or 0)
+                            prefix = "MC"
 
                             insert_data = [
                                 (f"{prefix}{max_num + i + 1:06d}", r["pattern"], r["best_grade"], None)
