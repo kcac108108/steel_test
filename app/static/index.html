@@ -170,6 +170,65 @@ body { font-family: 'Malgun Gothic', sans-serif; background: #ffffff; color: #1e
 .res-cnt    { font-size: 16px; font-weight: 800; color: #0f2744; white-space: nowrap; margin-left: auto; }
 
 
+/* ── 대시보드 ── */
+.dash-stat-cards { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 16px; }
+.dash-stat { background: white; border-radius: 14px; padding: 20px 22px; border: 1px solid #d1d5db; box-shadow: 0 1px 4px rgba(0,0,0,0.05), 0 6px 20px rgba(0,0,0,0.06); position: relative; overflow: hidden; transition: transform 0.15s, box-shadow 0.15s; }
+.dash-stat:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 12px 32px rgba(0,0,0,0.08); }
+.dash-stat::after { content:''; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 14px 14px 0 0; }
+.ds-blue::after   { background: linear-gradient(90deg,#3b82f6,#6366f1); }
+.ds-green::after  { background: linear-gradient(90deg,#10b981,#34d399); }
+.ds-purple::after { background: linear-gradient(90deg,#8b5cf6,#a78bfa); }
+.ds-orange::after { background: linear-gradient(90deg,#f59e0b,#fbbf24); }
+.dash-stat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.dash-stat-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.ds-blue   .dash-stat-icon { background: linear-gradient(135deg,#dbeafe,#e0e7ff); }
+.ds-green  .dash-stat-icon { background: linear-gradient(135deg,#d1fae5,#dcfce7); }
+.ds-purple .dash-stat-icon { background: linear-gradient(135deg,#ede9fe,#f3e8ff); }
+.ds-orange .dash-stat-icon { background: linear-gradient(135deg,#fef3c7,#fef9c3); }
+.dash-stat-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
+.ds-blue   .dash-stat-badge { background: #dbeafe; color: #1d4ed8; }
+.ds-green  .dash-stat-badge { background: #d1fae5; color: #065f46; }
+.ds-purple .dash-stat-badge { background: #ede9fe; color: #5b21b6; }
+.ds-orange .dash-stat-badge { background: #fef3c7; color: #92400e; }
+.dash-stat-label { font-size: 12px; color: #8896a9; font-weight: 600; margin-bottom: 6px; }
+.dash-stat-value { font-size: 30px; font-weight: 800; letter-spacing: -1px; color: #0c1f3f; margin-bottom: 6px; }
+.dash-stat-value span { font-size: 14px; font-weight: 500; color: #94a3b8; margin-left: 2px; }
+.dash-stat-change { font-size: 12px; color: #64748b; }
+.dash-change-pill { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 20px; background: #dcfce7; color: #16a34a; margin-right: 4px; }
+.dash-grid { display: grid; grid-template-columns: 1.15fr 1fr 0.85fr; gap: 14px; }
+.donut-section-divider { border: none; border-top: 1px solid #f1f5f9; margin: 16px 0; }
+.donut-wrap { display: flex; gap: 20px; align-items: center; }
+.donut { position: relative; width: 110px; height: 110px; flex-shrink: 0; }
+.donut svg { transform: rotate(-90deg); }
+.donut-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; }
+.donut-center .d-pct { font-size: 20px; font-weight: 800; color: #0c1f3f; }
+.donut-center .d-lbl { font-size: 10px; color: #94a3b8; font-weight: 600; }
+.d-legend { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.d-legend-row { display: flex; align-items: center; gap: 8px; }
+.d-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.d-name { font-size: 12px; color: #475569; flex: 1; }
+.d-bar-bg { flex: 1; background: #f1f5f9; border-radius: 999px; height: 5px; max-width: 50px; }
+.d-bar    { height: 5px; border-radius: 999px; }
+.d-pct-txt { font-size: 12px; font-weight: 700; width: 34px; text-align: right; }
+.upd-list { display: flex; flex-direction: column; }
+.upd-item { padding: 11px 0; border-bottom: 1px solid #f8fafc; }
+.upd-item:last-child { border-bottom: none; padding-bottom: 0; }
+.upd-filename { font-size: 12.5px; font-weight: 700; color: #1e293b; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upd-meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.upd-date { font-size: 11px; color: #94a3b8; margin-right: 2px; }
+.upd-tag { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; }
+.upd-tag.t-rag  { background: #dbeafe; color: #1d4ed8; }
+.upd-tag.t-rule { background: #d1fae5; color: #065f46; }
+.upd-tag.t-size { background: #fef3c7; color: #92400e; }
+.pipe-list { display: flex; flex-direction: column; gap: 8px; }
+.pipe-item-d { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; background: #f8fafc; border: 1px solid #e8ecf2; }
+.pipe-icon-d { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.pipe-info-d { flex: 1; }
+.pipe-name-d  { font-size: 12px; font-weight: 700; color: #1e293b; }
+.pipe-count-d { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+.pipe-ok  { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+.pipe-err { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
 .hidden { display: none !important; }
 </style>
 </head>
@@ -184,7 +243,10 @@ body { font-family: 'Malgun Gothic', sans-serif; background: #ffffff; color: #1e
 <div class="body">
   <div class="sidebar">
     <div class="menu-label">메뉴</div>
-    <div class="menu-item active" id="nav-classify" onclick="goPage('classify', this)">
+    <div class="menu-item active" id="nav-dashboard" onclick="goPage('dashboard', this)">
+      <span class="icon">🏠</span> 대시보드
+    </div>
+    <div class="menu-item" id="nav-classify" onclick="goPage('classify', this)">
       <span class="icon">📊</span> 분류 실행
     </div>
     <div class="menu-item" id="nav-update" onclick="goPage('update', this)">
@@ -197,8 +259,89 @@ body { font-family: 'Malgun Gothic', sans-serif; background: #ffffff; color: #1e
 
   <div class="content">
 
+    <!-- ===== 대시보드 ===== -->
+    <div id="page-dashboard" class="page active">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:18px">
+        <div>
+          <div class="page-title">🏠 대시보드</div>
+          <div class="page-sub">시스템 현황 및 데이터 통계</div>
+        </div>
+        <button onclick="loadDashboard()" style="font-size:12px;color:#64748b;cursor:pointer;background:white;border:1px solid #d1d5db;padding:7px 14px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.06);font-family:'Malgun Gothic',sans-serif;">↻ 새로고침</button>
+      </div>
+
+      <div class="dash-stat-cards">
+        <div class="dash-stat ds-blue">
+          <div class="dash-stat-top"><div class="dash-stat-icon">📋</div><div class="dash-stat-badge">룰베이스</div></div>
+          <div class="dash-stat-label">등록 패턴 수</div>
+          <div class="dash-stat-value" id="ds-rule-count">—<span>개</span></div>
+          <div class="dash-stat-change" id="ds-rule-change">조회 중...</div>
+        </div>
+        <div class="dash-stat ds-green">
+          <div class="dash-stat-top"><div class="dash-stat-icon">🔍</div><div class="dash-stat-badge">RAG</div></div>
+          <div class="dash-stat-label">유사사례 건수</div>
+          <div class="dash-stat-value" id="ds-rag-count">—<span>건</span></div>
+          <div class="dash-stat-change" id="ds-rag-change">조회 중...</div>
+        </div>
+        <div class="dash-stat ds-purple">
+          <div class="dash-stat-top"><div class="dash-stat-icon">📐</div><div class="dash-stat-badge">사이즈 사전</div></div>
+          <div class="dash-stat-label">매핑 건수</div>
+          <div class="dash-stat-value" id="ds-size-count">—<span>건</span></div>
+          <div class="dash-stat-change" id="ds-size-change">조회 중...</div>
+        </div>
+        <div class="dash-stat ds-orange">
+          <div class="dash-stat-top"><div class="dash-stat-icon">🕐</div><div class="dash-stat-badge">갱신일</div></div>
+          <div class="dash-stat-label">최근 갱신 일자</div>
+          <div class="dash-stat-value" style="font-size:20px;letter-spacing:-0.5px" id="ds-last-date">—</div>
+          <div class="dash-stat-change" id="ds-last-file" style="margin-top:4px;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="card">
+          <div class="card-title">강종 분류방법 비율 <span style="font-size:11px;color:#94a3b8;font-weight:400;margin-left:4px">최근 분류 기준</span></div>
+          <div id="ds-grade-chart"><div style="color:#94a3b8;font-size:12px;padding:24px 0;text-align:center">분류 실행 후 데이터가 표시됩니다</div></div>
+          <hr class="donut-section-divider" id="ds-size-divider" style="display:none">
+          <div id="ds-size-chart-wrap" style="display:none">
+            <div class="card-title" style="font-size:13px;margin-bottom:14px">사이즈 분류방법 비율 <span style="font-size:11px;color:#94a3b8;font-weight:400;margin-left:4px">최근 분류 기준</span></div>
+            <div id="ds-size-chart"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">최근 갱신 이력</div>
+          <div id="ds-history" class="upd-list"><div style="color:#94a3b8;font-size:12px;padding:10px 0">이력이 없습니다</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">파이프라인 상태</div>
+          <div class="pipe-list">
+            <div class="pipe-item-d">
+              <div class="pipe-icon-d" style="background:linear-gradient(135deg,#dbeafe,#e0e7ff)">📋</div>
+              <div class="pipe-info-d"><div class="pipe-name-d">룰베이스 (Oracle)</div><div class="pipe-count-d" id="pp-rule-cnt">조회 중...</div></div>
+              <div id="pp-oracle" class="pipe-ok">—</div>
+            </div>
+            <div class="pipe-item-d">
+              <div class="pipe-icon-d" style="background:linear-gradient(135deg,#d1fae5,#dcfce7)">🔍</div>
+              <div class="pipe-info-d"><div class="pipe-name-d">RAG (ChromaDB)</div><div class="pipe-count-d" id="pp-rag-cnt">조회 중...</div></div>
+              <div id="pp-chroma" class="pipe-ok">—</div>
+            </div>
+            <div class="pipe-item-d">
+              <div class="pipe-icon-d" style="background:linear-gradient(135deg,#ede9fe,#f3e8ff)">🤖</div>
+              <div class="pipe-info-d"><div class="pipe-name-d">LLM (GPT-4o-mini)</div><div class="pipe-count-d">폴백 처리</div></div>
+              <div id="pp-llm" class="pipe-ok">—</div>
+            </div>
+            <div class="pipe-item-d">
+              <div class="pipe-icon-d" style="background:linear-gradient(135deg,#fef3c7,#fef9c3)">📐</div>
+              <div class="pipe-info-d"><div class="pipe-name-d">사이즈 사전</div><div class="pipe-count-d" id="pp-size-cnt">조회 중...</div></div>
+              <div id="pp-size" class="pipe-ok">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== 분류 실행 ===== -->
-    <div id="page-classify" class="page active">
+    <div id="page-classify" class="page">
       <div class="page-title">📊 분류 실행</div>
       <div class="page-sub">강종 및 사이즈 분류가 필요한 엑셀 파일을 업로드하면 Rule → RAG → LLM 순서로 강종을 분류하고 사이즈를 자동 추출합니다.</div>
 
@@ -538,6 +681,7 @@ function goPage(name, el) {
   document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   el.classList.add('active');
+  if (name === 'dashboard') loadDashboard();
 }
 
 // ─────────────────────────────────────────────
@@ -1049,6 +1193,129 @@ function showUpdError(msg) {
   setText('upd-err-msg', msg);
   document.getElementById('upd-start-btn').disabled = false;
 }
+
+// ─────────────────────────────────────────────
+// 대시보드
+// ─────────────────────────────────────────────
+function renderDonut(containerId, segments, centerPct, centerLbl) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const r = 44, cx = 59, cy = 59, circ = 2 * Math.PI * r;
+  let offset = 0, circles = '';
+  for (const seg of segments) {
+    const dash = (seg.pct / 100) * circ;
+    circles += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="14"
+      stroke-dasharray="${dash.toFixed(1)} ${(circ - dash).toFixed(1)}" stroke-dashoffset="${(-offset).toFixed(1)}"/>`;
+    offset += dash;
+  }
+  el.innerHTML = `
+    <div class="donut-wrap">
+      <div class="donut">
+        <svg width="110" height="110" viewBox="0 0 118 118">
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#f1f5f9" stroke-width="14"/>
+          ${circles}
+        </svg>
+        <div class="donut-center"><div class="d-pct">${centerPct}</div><div class="d-lbl">${centerLbl}</div></div>
+      </div>
+      <div class="d-legend">
+        ${segments.map(s => `
+          <div class="d-legend-row">
+            <div class="d-dot" style="background:${s.color}"></div>
+            <div class="d-name">${s.name}</div>
+            <div class="d-bar-bg"><div class="d-bar" style="width:${s.pct}%;background:${s.color}"></div></div>
+            <div class="d-pct-txt" style="color:${s.color}">${s.pct}%</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function setPipeBadge(id, status) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (status === 'ok') { el.className = 'pipe-ok'; el.textContent = '정상'; }
+  else                 { el.className = 'pipe-err'; el.textContent = '오류'; }
+}
+
+async function loadDashboard() {
+  try {
+    const res  = await fetch('/api/dashboard/stats');
+    const data = await res.json();
+
+    // 통계 카드
+    const ruleCount = data.rulebase?.count  ?? 0;
+    const ragCount  = data.rag?.count       ?? 0;
+    const sizeCount = data.size_dict?.count ?? 0;
+    document.getElementById('ds-rule-count').innerHTML = fmt(ruleCount) + '<span>개</span>';
+    document.getElementById('ds-rag-count').innerHTML  = fmt(ragCount)  + '<span>건</span>';
+    document.getElementById('ds-size-count').innerHTML = fmt(sizeCount) + '<span>건</span>';
+
+    // 파이프라인 상태 배지
+    const pp = data.pipeline || {};
+    setPipeBadge('pp-oracle', pp.oracle);
+    setPipeBadge('pp-chroma', pp.chromadb);
+    setPipeBadge('pp-llm',    pp.llm);
+    setPipeBadge('pp-size',   pp.size_dict);
+    setText('pp-rule-cnt', fmt(ruleCount) + ' 패턴');
+    setText('pp-rag-cnt',  fmt(ragCount)  + ' 벡터');
+    setText('pp-size-cnt', fmt(sizeCount) + ' 매핑');
+
+    // 통계 카드 하단 상태 텍스트
+    document.getElementById('ds-rule-change').textContent = pp.oracle   === 'ok' ? 'Oracle 정상 연결'  : '연결 오류';
+    document.getElementById('ds-rag-change').textContent  = pp.chromadb === 'ok' ? 'ChromaDB 정상 연결' : '연결 오류';
+    document.getElementById('ds-size-change').textContent = pp.size_dict === 'ok' ? '사전 정상 로드'    : '파일 없음';
+
+    // 갱신 이력
+    const history = data.update_history || [];
+    if (history.length) {
+      const last = history[history.length - 1];
+      document.getElementById('ds-last-date').innerHTML = last.date + '<span></span>';
+      document.getElementById('ds-last-file').textContent = last.filename;
+      const histEl = document.getElementById('ds-history');
+      histEl.innerHTML = [...history].reverse().slice(0, 5).map(h => `
+        <div class="upd-item">
+          <div class="upd-filename">${h.filename}</div>
+          <div class="upd-meta">
+            <span class="upd-date">${h.date}</span>
+            ${h.rag_added  > 0 ? `<span class="upd-tag t-rag">RAG +${fmt(h.rag_added)}</span>`   : ''}
+            ${h.rule_added > 0 ? `<span class="upd-tag t-rule">룰 +${fmt(h.rule_added)}</span>`  : ''}
+            ${h.size_added > 0 ? `<span class="upd-tag t-size">사이즈 +${fmt(h.size_added)}</span>` : ''}
+          </div>
+        </div>`).join('');
+    }
+
+    // 도넛 차트 (마지막 분류 결과)
+    const lc = data.last_classify;
+    if (lc && lc.method_counts) {
+      const mc = lc.method_counts, total = lc.total || 1;
+      const rule = mc.rule || 0, rag = mc.rag || 0, llm = mc.llm || 0, un = mc.unclassified || 0;
+      const clsRate = Math.round((rule + rag + llm) / total * 100);
+      renderDonut('ds-grade-chart', [
+        { color: '#3b82f6', name: 'RAG',     pct: Math.round(rag  / total * 100) },
+        { color: '#10b981', name: '룰베이스', pct: Math.round(rule / total * 100) },
+        { color: '#f59e0b', name: 'LLM',     pct: Math.round(llm  / total * 100) },
+        { color: '#e2e8f0', name: '미분류',   pct: Math.round(un   / total * 100) },
+      ], clsRate + '%', '분류율');
+
+      if (lc.size_counts) {
+        const sc = lc.size_counts;
+        const exact = sc.exact || 0, regex = sc.regex || 0, sllm = sc.llm || 0, sun = sc.unclassified || 0;
+        const sRate = Math.round((exact + regex + sllm) / total * 100);
+        document.getElementById('ds-size-divider').style.display = '';
+        document.getElementById('ds-size-chart-wrap').style.display = '';
+        renderDonut('ds-size-chart', [
+          { color: '#6366f1', name: '정확매칭', pct: Math.round(exact / total * 100) },
+          { color: '#8b5cf6', name: '정규식',   pct: Math.round(regex / total * 100) },
+          { color: '#f59e0b', name: 'LLM',      pct: Math.round(sllm  / total * 100) },
+          { color: '#e2e8f0', name: '미분류',    pct: Math.round(sun   / total * 100) },
+        ], sRate + '%', '추출율');
+      }
+    }
+  } catch(e) {
+    console.error('대시보드 로드 실패:', e);
+  }
+}
+
+loadDashboard();
 
 </script>
 </body>

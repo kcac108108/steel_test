@@ -208,6 +208,27 @@ async def start_update(
                 summary["size"] = {"added": size_added, "total": len(cache)}
                 _emit(job_id, {"type": "size_done", "added": size_added, "total": len(cache)})
 
+            # 갱신 이력 저장 (대시보드용)
+            try:
+                from datetime import datetime
+                history_file = Path("data") / "update_history.json"
+                history_file.parent.mkdir(exist_ok=True)
+                history = []
+                if history_file.exists():
+                    with open(history_file, "r", encoding="utf-8") as _hf:
+                        history = json.load(_hf)
+                history.append({
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "filename": file.filename,
+                    "rag_added":  summary.get("rag", {}).get("added", 0),
+                    "rule_added": summary.get("rulebase", {}).get("inserted", 0),
+                    "size_added": summary.get("size", {}).get("added", 0),
+                })
+                with open(history_file, "w", encoding="utf-8") as _hf:
+                    json.dump(history, _hf, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+
             _jobs[job_id]["status"] = "done"
             _jobs[job_id]["summary"] = summary
             _emit(job_id, {"type": "done", "summary": summary})

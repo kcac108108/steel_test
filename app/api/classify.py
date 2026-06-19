@@ -106,6 +106,15 @@ async def start_classify(
             method_counts = dict(Counter(r.method.value for r in results))
             size_counts = dict(Counter(m for _, m in size_results))
 
+            # 마지막 분류 통계 저장 (대시보드용)
+            try:
+                data_dir = Path("data")
+                data_dir.mkdir(exist_ok=True)
+                with open(data_dir / "last_classify_stats.json", "w", encoding="utf-8") as _f:
+                    json.dump({"total": total, "method_counts": method_counts, "size_counts": size_counts}, _f, ensure_ascii=False)
+            except Exception:
+                pass
+
             _emit(job_id, {
                 "type": "done",
                 "total": total,
