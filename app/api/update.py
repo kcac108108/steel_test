@@ -229,6 +229,38 @@ async def start_update(
             except Exception:
                 pass
 
+            # 통계 캐시 저장 (대시보드 빠른 로딩용)
+            try:
+                cache_file = Path("data") / "stats_cache.json"
+                existing_cache = {}
+                if cache_file.exists():
+                    with open(cache_file, "r", encoding="utf-8") as _cf:
+                        existing_cache = json.load(_cf)
+                new_cache = dict(existing_cache)
+
+                if flag_rulebase:
+                    conn2 = oracledb.connect(
+                        user=settings.oracle_user,
+                        password=settings.oracle_password,
+                        dsn=settings.oracle_dsn,
+                    )
+                    cur2 = conn2.cursor()
+                    cur2.execute("SELECT COUNT(*) FROM rule_base")
+                    new_cache["rulebase_count"] = cur2.fetchone()[0]
+                    cur2.close()
+                    conn2.close()
+
+                if flag_rag and "rag" in dir():
+                    new_cache["rag_count"] = rag._collection.count()
+
+                if flag_size:
+                    new_cache["size_dict_count"] = summary.get("size", {}).get("total", existing_cache.get("size_dict_count", 0))
+
+                with open(cache_file, "w", encoding="utf-8") as _cf:
+                    json.dump(new_cache, _cf, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+
             _jobs[job_id]["status"] = "done"
             _jobs[job_id]["summary"] = summary
             _emit(job_id, {"type": "done", "summary": summary})

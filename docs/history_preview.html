@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: 'Malgun Gothic', sans-serif; background: #f8fafc; padding: 30px; }
+  h3 { font-size: 13px; color: #64748b; margin-bottom: 12px; }
+  .upd-list { display: flex; flex-direction: column; gap: 10px; max-width: 380px; }
+  .upd-item { background: white; border: 1px solid #e8ecf2; border-radius: 10px; padding: 12px 14px; }
+  .upd-filename { font-size: 12.5px; font-weight: 700; color: #1e293b; margin-bottom: 5px; }
+  .upd-meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .upd-date { font-size: 11px; color: #94a3b8; margin-right: 2px; }
+  .upd-tag { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; }
+  .t-rag  { background: #dbeafe; color: #1d4ed8; }
+  .t-rule { background: #d1fae5; color: #065f46; }
+  .t-size { background: #fef3c7; color: #92400e; }
+  .t-none { background: #f1f5f9; color: #94a3b8; }
+</style>
+</head>
+<body>
+
+<h3>▶ 추가된 데이터가 있을 때</h3>
+<div class="upd-list">
+  <div class="upd-item">
+    <div class="upd-filename">0605~8_(테스트).xlsx</div>
+    <div class="upd-meta">
+      <span class="upd-date">2026-06-22</span>
+      <span class="upd-tag t-rag">RAG +1,234</span>
+      <span class="upd-tag t-rule">룰 +56</span>
+      <span class="upd-tag t-size">사이즈 +789</span>
+    </div>
+  </div>
+  <div class="upd-item">
+    <div class="upd-filename">0601~4.xlsx</div>
+    <div class="upd-meta">
+      <span class="upd-date">2026-06-18</span>
+      <span class="upd-tag t-rag">RAG +880</span>
+      <span class="upd-tag t-rule">룰 +12</span>
+    </div>
+  </div>
+</div>
+
+<br>
+<h3>▶ 변경 없을 때 (이미 처리된 데이터 재업로드)</h3>
+<div class="upd-list">
+  <div class="upd-item">
+    <div class="upd-filename">0605~8_(테스트).xlsx</div>
+    <div class="upd-meta">
+      <span class="upd-date">2026-06-22</span>
+      <span class="upd-tag t-none">변경 없음</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

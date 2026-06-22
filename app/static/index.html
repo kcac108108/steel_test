@@ -220,6 +220,7 @@ body { font-family: 'Malgun Gothic', sans-serif; background: #ffffff; color: #1e
 .upd-tag.t-rag  { background: #dbeafe; color: #1d4ed8; }
 .upd-tag.t-rule { background: #d1fae5; color: #065f46; }
 .upd-tag.t-size { background: #fef3c7; color: #92400e; }
+.upd-tag.t-none { background: #f1f5f9; color: #94a3b8; }
 .pipe-list { display: flex; flex-direction: column; gap: 8px; }
 .pipe-item-d { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; background: #f8fafc; border: 1px solid #e8ecf2; }
 .pipe-icon-d { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
@@ -1279,6 +1280,7 @@ async function loadDashboard() {
             ${h.rag_added  > 0 ? `<span class="upd-tag t-rag">RAG +${fmt(h.rag_added)}</span>`   : ''}
             ${h.rule_added > 0 ? `<span class="upd-tag t-rule">룰 +${fmt(h.rule_added)}</span>`  : ''}
             ${h.size_added > 0 ? `<span class="upd-tag t-size">사이즈 +${fmt(h.size_added)}</span>` : ''}
+            ${(h.rag_added||0)+(h.rule_added||0)+(h.size_added||0) === 0 ? `<span class="upd-tag t-none">변경 없음</span>` : ''}
           </div>
         </div>`).join('');
     }
